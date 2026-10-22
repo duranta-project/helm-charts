@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: MIT
+#
+# Configuration for ci-scripts/runE2ETests.py. Every key is optional (a missing key takes the script default).
+
+cluster:
+  type: kubernetes          # kubernetes | openshift
+  # kubernetes only: "minikube" creates a fresh cluster with ci-scripts/create-cluster.sh (multus included);
+  # "existing" uses the kubectl context below. OpenShift always uses an existing cluster.
+  create: minikube
+  context: ""               # kubectl/helm context for an existing cluster; empty = current context
+  deleteAfter: true         # delete the minikube cluster created by the script when the run ends
+
+# Where the charts come from. The OAI 5G core charts are in openairinterface/orchestration, the Duranta RAN, FlexRIC
+# and xApp charts in duranta-project/helm-charts; both keep them in charts/. For each set:
+#   path: a local repository (relative to this repository, or absolute); "." is this repository
+#   git + branch: cloned for the run when path is empty
+# Command line: --core-path/--core-git/--core-branch and --ran-path/--ran-git/--ran-branch.
+charts:
+  core:
+    path: ""
+    git: https://github.com/openairinterface/orchestration.git
+    branch: main
+  ran:
+    path: "."
+    git: https://github.com/duranta-project/helm-charts.git
+    branch: main
+
+namespace: oai-e2e
+
+# false: every interface on the cluster network (eth0).
+# true:  N2, N3, N4, F1, E1 and E2 on dedicated multus macvlan networks, using the override files in valuesDir
+#        (the NR-UE always reaches the RF simulator over the cluster network).
+multus: false
+
+# Override files used when multus is true. The defaults use hostInterface eth0 (minikube); for another cluster
+# copy the directory and adapt hostInterface and the subnets.
+valuesDir: ci-scripts/values
+
+# Deploy the FlexRIC near-RT RIC after the core network and enable the E2 agent of every RAN chart. Each scenario
+# then also checks the E2 setup of its RAN functions and runs the xapp_kpm_moni xApp (KPM indications).
+flexric: true
+
+# Deploy Grafana (grafana-community/grafana chart) with the FlexRIC "KPI measurements" dashboard; the xApps write their data
+# into the shared PVC of duranta-flexric and the test checks that the dashboard shows the UE throughput (--grafana).
+grafana: false
+
+# Scenarios run in this order, after the core network and FlexRIC (always deployed first):
+#   gnb     monolithic gNB + NR-UE
+#   f1      CU + DU + NR-UE (F1 split)
+#   e1-f1   CU-CP + CU-UP + DU + NR-UE (E1 and F1 split)
+scenarios: [gnb, f1, e1-f1]
+
+# Container images. Empty = the default of each chart's values.yaml. The RAN chart defaults do not all use the
+# same tag, so setting ranTag is recommended.
+images:
+  coreTag: ""               # every core NF: NRF, UDR, UDM, AUSF, AMF, SMF, UPF, LMF (e.g. v2.2.2)
+  ranTag: ""                # gNB, CU, CU-CP, CU-UP, DU and NR-UE (e.g. 2026.w40 or develop)
+  flexricTag: ""            # FlexRIC (e.g. develop)
+  charts: {}                # per chart, wins over the tags above, e.g.
+  #  duranta-oai-gnb: {repository: docker.io/oaisoftwarealliance/oai-gnb, tag: 2026.w40}
+  #  duranta-oai-cu-up: {tag: 2026.w40}
+  #  oai-amf: {repository: my-registry/oai-amf}
+
+timeout: 600                # seconds to wait for a release to be installed and its pods ready
+checkTimeout: 180           # seconds a check (NG/F1/E1/E2 setup, xApp, UE session) may take before the test fails

@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+#
+# Multus override for duranta-oai-gnb (monolithic) — dedicated subnets matching the core override:
+#
+#   N2  (NGAP):  172.21.6.0/22    → gNB: 172.21.6.92   (AMF is .90)
+#   N3  (GTP):   10.10.5.0/24     → gNB: 10.10.5.4     (UPF is .2)
+#   E2  (E2AP):  192.168.85.0/24  → gNB: 192.168.85.91 (FlexRIC is .90, only used with config.enableE2)
+#
+# amfHost / ricHost point to the multus IPs because AMF and RIC listen only on those interfaces.
+
+config:
+  amfHost: "172.21.6.90"
+  ricHost: "192.168.85.90"
+multus:
+  enabled: true
+  interfaces:
+    - name: "n2"
+      hostInterface: "eth0"
+      ipAdd: "172.21.6.92"
+      netmask: "22"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "n3"
+      hostInterface: "eth0"
+      ipAdd: "10.10.5.4"
+      netmask: "24"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "e2"
+      hostInterface: "eth0"
+      ipAdd: "192.168.85.91"
+      netmask: "24"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "ru"
+      enabled: false

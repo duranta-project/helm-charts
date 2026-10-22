@@ -1,0 +1,186 @@
+# SPDX-License-Identifier: MIT
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Release.Name }}
+    {{- include "duranta-flexric.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "duranta-flexric.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "duranta-flexric.selectorLabels" . | nindent 8 }}
+        app: {{ .Release.Name }}
+    {{- if and .Values.multus.enabled .Values.multus.interfaces }}
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |-
+          [
+          {{- $first := true }}
+          {{- range .Values.multus.interfaces }}
+          {{- if .enabled }}
+            {{- if not $first }},{{- end }}
+            {
+              "name": "{{ $.Release.Name }}-{{ .name }}-{{ $.Chart.Name }}",
+              "interface": "{{ .name }}"
+              {{- if .mac }},
+              "mac": "{{ .mac }}"
+              {{- end }}
+              {{- if .defaultRoute }},
+              "default-route": ["{{ .defaultRoute }}"]
+              {{- end }}
+              {{- if .gateway }},
+              "gateway": "{{ .gateway }}"
+              {{- end }}
+            }
+            {{- $first = false }}
+          {{- end }}
+          {{- end }}
+          ]
+    {{- end }}
+    spec:
+      # pause is PID 1 and reaps zombies; nearRT-RIC is not PID 1, so SIGTERM is not ignored
+      shareProcessNamespace: true
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{ toYaml .Values.imagePullSecrets | indent 8 }}
+    {{- end }}
+      initContainers:
+        - name: config-patcher
+          image: docker.io/mikefarah/yq:4.47.2
+          command: [ "sh", "-c" ]
+          args:
+            - |
+              set -e
+              echo "Patching config..."
+              echo "$E2_IF_NAME"
+              cp /tmp/config/flexric.conf /tmp/config_patch/flexric.conf
+              export E2_IP=$(ip -f inet addr show $E2_IF_NAME | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*");
+              echo "Resolved: E2=$E2_IP"
+              sed -i s/@E2_IP@/$E2_IP/g /tmp/config_patch/flexric.conf;
+              cat /tmp/config_patch/flexric.conf
+          env:
+            - name: E2_IF_NAME
+              value: '{{ include "duranta-flexric.e2IfName" . }}'
+          volumeMounts:
+            - name: shared-data
+              mountPath: /tmp/config_patch
+            - name: configuration
+              mountPath: /tmp/config
+          resources:
+            requests: { cpu: "1m", memory: "50Mi" }
+            limits:   { cpu: "1m", memory: "50Mi" }
+      containers:
+      - name: ric
+        image: "{{ .Values.nfimage.repository }}:{{ .Values.nfimage.version }}"
+        imagePullPolicy: {{ .Values.nfimage.pullPolicy }}
+        volumeMounts:
+          - mountPath: /usr/local/etc/flexric/
+            name: shared-data
+          {{- if .Values.xappDb.enabled }}
+          - mountPath: /xapp_db_dir
+            name: xapp-db
+          {{- end }}
+        {{- if .Values.resources.define}}
+        resources:
+          requests:
+            memory: {{ .Values.resources.requests.nf.memory | quote }}
+            cpu: {{ .Values.resources.requests.nf.cpu | quote }}
+          limits:
+            memory: {{ .Values.resources.limits.nf.memory | quote }}
+            cpu: {{ .Values.resources.limits.nf.cpu | quote }}
+        {{- end}}
+        env:
+          - name: TZ
+            value: {{ .Values.config.timeZone | quote }}
+        ports:
+        - containerPort: 36421
+          name: e2
+          protocol: SCTP
+        - containerPort: 36422
+          name: e42
+          protocol: SCTP
+        {{- if and .Values.readinessProbe .Values.start.ric }}
+        readinessProbe:
+          exec:
+            command: ["pgrep", "-f", "nearRT-RIC"]
+          initialDelaySeconds: 2
+          periodSeconds: 3
+        {{- end }}
+        {{- if and .Values.livenessProbe .Values.start.ric }}
+        livenessProbe:
+          exec:
+            command: ["pgrep", "-f", "nearRT-RIC"]
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        {{- end }}
+        {{- if .Values.start.ric }}
+        command:
+          - stdbuf
+          - -o0
+          - nearRT-RIC
+        {{- else }}
+        command:
+          - /bin/sleep
+          - infinity
+        {{- end }}
+      {{- if .Values.includeTcpDumpContainer }}
+      - name: tcpdump
+        image: "{{ .Values.tcpdumpimage.repository }}:{{ .Values.tcpdumpimage.version }}"
+        imagePullPolicy: {{ .Values.tcpdumpimage.pullPolicy }}
+        {{- if .Values.resources.define }}
+        resources:
+          requests:
+            memory: {{ .Values.resources.requests.tcpdump.memory | quote }}
+            cpu: {{ .Values.resources.requests.tcpdump.cpu | quote }}
+          limits:
+            memory: {{ .Values.resources.limits.tcpdump.memory | quote }}
+            cpu: {{ .Values.resources.limits.tcpdump.cpu | quote }}
+        {{- end}}
+        securityContext:
+          capabilities:
+            add: [ "NET_ADMIN", "NET_RAW" ]
+            drop: [ "ALL" ]
+        {{- if .Values.start.tcpdump }}
+        command:
+          - /bin/sh
+          - -c
+          - mkdir -p /tmp/pcap && /usr/bin/tcpdump -i any -w /tmp/pcap/{{ .Chart.Name }}_`date +%Y-%m-%d_%H_%M-%S-%Z`.pcap
+        {{- else}}
+        command:
+          - /bin/sleep
+          - infinity
+        {{- end}}
+      {{- end }}
+      volumes:
+        - name: configuration
+          configMap:
+            name: {{ .Chart.Name }}-configmap
+        - name: shared-data
+          emptyDir: {}
+        {{- if .Values.xappDb.enabled }}
+        - name: xapp-db
+          persistentVolumeClaim:
+            claimName: {{ .Chart.Name }}-xapp-db
+        {{- end }}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccountName: {{ .Chart.Name }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+         {{- toYaml .Values.nodeSelector | nindent 12 }}
+      {{- end }}
+      {{- if .Values.nodeName }}
+      nodeName: {{ .Values.nodeName }}
+      {{- end }}

@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# CNTi Test Suite (https://github.com/lfn-cnti/testsuite) configuration: Duranta FlexRIC near-RT RIC
+# Run with lfn-cnti/runCNTI.sh duranta-flexric
+config_version: "v2"
+deployments:
+  helm_dirs:
+    - name: duranta-flexric
+      helm_directory: ../../charts/duranta-flexric
+      namespace: oai-cnti

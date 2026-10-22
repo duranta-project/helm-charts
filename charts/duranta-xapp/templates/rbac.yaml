@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: MIT
+#
+# OpenShift: the restricted SCC runs pods with a random UID and does not allow runAsUser 0. The xApp runs as root
+# (podSecurityContext) to write flexric.conf and its SQLite files, but needs no privileges or capabilities, so it
+# gets its own minimal SCC instead of "privileged" or "anyuid", used by its service account through a Role.
+
+{{- $kubeDist := .Values.kubernetesDistribution }}
+{{- if and (hasKey .Values "global") (hasKey .Values.global "kubernetesDistribution") }}
+  {{- $kubeDist = .Values.global.kubernetesDistribution }}
+{{- end }}
+
+{{- if eq $kubeDist "Openshift" }}
+{{- $scc := printf "%s-%s" (include "duranta-xapp.fullname" .) .Release.Namespace }}
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: {{ $scc }}
+  labels:
+    {{- include "duranta-xapp.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/description: Lets the {{ .Release.Name }} xApp run as root without privileges or capabilities
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: false
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+  - ALL
+allowedCapabilities: []
+defaultAddCapabilities: []
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: MustRunAs
+fsGroup:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+seccompProfiles:
+  - runtime/default
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+users: []
+groups: []
+priority: null
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "duranta-xapp.fullname" . }}-scc
+  labels:
+    {{- include "duranta-xapp.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - security.openshift.io
+    resources:
+      - securitycontextconstraints
+    resourceNames:
+      - {{ $scc }}
+    verbs:
+      - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "duranta-xapp.fullname" . }}-scc
+  labels:
+    {{- include "duranta-xapp.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "duranta-xapp.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "duranta-xapp.fullname" . }}-scc
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

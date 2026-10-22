@@ -1,0 +1,4 @@
+CNTi Test Suite configuration files lfn-cnti/*/cnti-testsuite.yaml:
+
+Source: https://github.com/lfn-cnti/testsuite (configuration format of the CNTi Test Suite, LF Networking)
+License: Apache 2.0, as required by the CNTi project

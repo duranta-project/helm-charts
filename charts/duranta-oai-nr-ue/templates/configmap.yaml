@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-configmap
+data:
+  nr-ue.conf: |
+    uicc0 = {
+      imsi = "{{ .Values.config.imsi }}";
+      key = "{{ .Values.config.key }}";
+      opc = "{{ .Values.config.opc }}";
+
+      pdu_sessions = (
+      {{- range $index, $pdu := .Values.config.pdu_sessions }}
+        {
+          dnn = "{{ $pdu.dnn }}";
+          nssai_sst = {{ $pdu.sst }};
+          {{- if $pdu.sd }}
+          nssai_sd = "{{ $pdu.sd }}";
+          {{- end }}
+          {{- if $pdu.type }}
+          type = "{{ $pdu.type }}";
+          {{- end }}
+        }{{- if lt (add1 $index) (len $.Values.config.pdu_sessions) }},{{ end }}
+      {{- end }}
+      );
+    }

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+#
+# Extra values for the Grafana chart on OpenShift (use together with values.yaml): the restricted SCC assigns the
+# UID/GID of the namespace, so the chart must not request its fixed 472 user, as described in the Grafana chart docs.
+securityContext:
+  runAsUser: null
+  runAsGroup: null
+  fsGroup: null

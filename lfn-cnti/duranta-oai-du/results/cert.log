@@ -1,0 +1,79 @@
+CNTi TestSuite version: v2.3.0
+State Tests
+🎬 Testing: [node_drain]
+Draining minikube-m02 (1 pod(s) of 1 workload(s))...
+   🏆PASSED: [node_drain] node_drain passed: 1 node(s) drained, 1 workload(s) rescheduled 🗡️💀♻
+   > Node minikube-m02: 1 pod(s) of 1 workload(s) evicted in 1 s
+   > Deployment/duranta-oai-du in oai-cnti: Ready again on another node within 13 s of eviction
+State results: 1 of 1 tests passed
+
+Security Tests
+🎬 Testing: [selinux_options]
+   🏆PASSED: [selinux_options] Pods do not set seLinuxOptions 🔓🔑
+🎬 Testing: [container_sock_mounts]
+   🏆PASSED: [container_sock_mounts] Container engine daemon sockets are not mounted as volumes 🔓🔑
+🎬 Testing: [privileged_containers]
+   🏆PASSED: [privileged_containers] No privileged containers 🔓🔑
+Running the Kubescape cluster scan...
+🎬 Testing: [cpu_limits]
+   🏆PASSED: [cpu_limits] Containers have CPU limits set 🔓🔑
+🎬 Testing: [memory_limits]
+   🏆PASSED: [memory_limits] Containers have memory limits set 🔓🔑
+🎬 Testing: [non_root_containers]
+   🏆FAILED: [non_root_containers] Found containers running as root user or with root group membership 🔓🔑
+   > impacted: Deployment/duranta-oai-du in oai-cnti: spec.template.spec.securityContext.runAsUser should be 1000
+   > impacted: Deployment/duranta-oai-du in oai-cnti: spec.template.spec.securityContext.runAsGroup should be 1000
+   > remediation: If your application does not need root privileges, make sure to define runAsNonRoot as true or explicitly set the runAsUser using ID 1000 or higher under the PodSecurityContext or container securityContext. In addition, set an explicit value for runAsGroup using ID 1000 or higher.
+🎬 Testing: [hostpath_mounts]
+Running the Kubescape cluster scan...
+   🏆PASSED: [hostpath_mounts] Containers do not have hostPath mounts 🔓🔑
+Security results: 6 of 7 tests passed
+
+Configuration Tests
+🎬 Testing: [latest_tag]
+   🏆PASSED: [latest_tag] Container images are not using the latest tag 🏷️
+🎬 Testing: [hostport_not_used]
+   🏆PASSED: [hostport_not_used] HostPort is not used 
+🎬 Testing: [hardcoded_ip_addresses_in_k8s_runtime_configuration]
+   🏆PASSED: [hardcoded_ip_addresses_in_k8s_runtime_configuration] No hard-coded IP addresses found in the runtime K8s configuration 
+Configuration results: 3 of 3 tests passed
+
+Observability and Diagnostics Tests
+🎬 Testing: [log_output]
+   🏆PASSED: [log_output] Resources output logs to stdout and stderr 📶☠️
+   > Deployment/duranta-oai-du in oai-cnti: logs from duranta-oai-du-7644d86d5f-xzwkh
+Observability and diagnostics results: 1 of 1 tests passed
+
+Microservice Tests
+🎬 Testing: [single_process_type]
+   🏆PASSED: [single_process_type] Only one process type used ⚖👀
+   > Deployment/duranta-oai-du container du: process type nr-softmodem
+🎬 Testing: [zombie_handled]
+   🏆PASSED: [zombie_handled] Zombie handled ⚖👀
+   > Zombie probe started in 1 container(s): Deployment/duranta-oai-du container 41a8b6936afb
+🎬 Testing: [sig_term_handled]
+   🏆PASSED: [sig_term_handled] Sig Term handled ⚖👀
+   > Checked duranta-oai-du-7644d86d5f-xzwkh/du: PID 1 155423 (supervisor), judged pid(s) 155437, 155440, grace 5s: 155437 stopped with SIGTERM, 155440 stopped without a signal in its trace
+Installing cluster-tools on every node (first run pulls the image)...
+🎬 Testing: [specialized_init_system]
+   🏆PASSED: [specialized_init_system] Containers use specialized init systems 🖥️ 🚀
+   > Pod/duranta-oai-du-7644d86d5f-xzwkh container du: init '/tini'
+Microservice results: 4 of 4 tests passed
+
+Reliability, Resilience, and Availability Tests
+🎬 Testing: [liveness]
+   🏆PASSED: [liveness] All workload resources have at least one container with a liveness probe ⎈🧫
+   > Deployment/duranta-oai-du in oai-cnti: liveness probe on du
+🎬 Testing: [readiness]
+   🏆PASSED: [readiness] All workload resources have at least one container with a readiness probe ⎈🧫
+   > Deployment/duranta-oai-du in oai-cnti: readiness probe on du
+Reliability, resilience, and availability results: 2 of 2 tests passed
+
+Compatibility, Installability & Upgradability Tests
+Compatibility, installability, and upgradeability results: 0 of 1 tests passed
+
+RESULTS SUMMARY
+  - 17 of 19 total tests passed
+  - 17 of 19 essential tests passed
+Cert: PASSED (17 of 19 essential tests passed, threshold 15)
+Results: /home/sagar/oai/orange/charts/lfn-cnti/oai-du/results/cnti-testsuite-results-20261022-132009-662.yml (latest: /home/sagar/oai/orange/charts/lfn-cnti/oai-du/results/latest.yml)

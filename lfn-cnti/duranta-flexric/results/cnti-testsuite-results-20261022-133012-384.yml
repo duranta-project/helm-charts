@@ -1,0 +1,236 @@
+---
+name: cnti testsuite
+testsuite_version: v2.3.0
+schema_version: 1
+status: passed
+command: /tmp/claude-1001/-home-sagar-oai-orange-charts/473fc2c1-016e-4ced-8038-3e649cb60436/scratchpad/cnti/cnti-testsuite
+  cert --results-dir /home/sagar/oai/orange/charts/lfn-cnti/duranta-flexric/results
+exit_code: 0
+tools:
+  kubescape: 4.0.12
+  kubescape_framework: nsa
+  kubescape_regolibrary: 2.0.38
+  kyverno: 1.19.1
+  kyverno_policies: release-1.19
+  litmus: 3.31.0
+items:
+- name: node_drain
+  status: passed
+  message: 'node_drain passed: 1 node(s) drained, 1 workload(s) rescheduled'
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:12.522910319Z"
+  end_time: "2026-10-22T11:30:44.379367969Z"
+  task_runtime: 31.85645765
+  details:
+  - 'Node minikube-m02: 1 pod(s) of 1 workload(s) evicted in 4 s'
+  - 'Deployment/duranta-flexric in oai-cnti: Ready again on another node within 0
+    s of eviction'
+- name: selinux_options
+  status: passed
+  message: Pods do not set seLinuxOptions
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:44.388328751Z"
+  end_time: "2026-10-22T11:30:45.856489635Z"
+  task_runtime: 1.468160884
+- name: container_sock_mounts
+  status: passed
+  message: Container engine daemon sockets are not mounted as volumes
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:45.869043481Z"
+  end_time: "2026-10-22T11:30:46.581769357Z"
+  task_runtime: 0.712725876
+- name: privileged_containers
+  status: passed
+  message: No privileged containers
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:46.594365371Z"
+  end_time: "2026-10-22T11:30:46.631358640Z"
+  task_runtime: 0.036993269
+- name: cpu_limits
+  status: passed
+  message: Containers have CPU limits set
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:49.029272013Z"
+  end_time: "2026-10-22T11:30:49.031257522Z"
+  task_runtime: 0.001985509
+- name: memory_limits
+  status: passed
+  message: Containers have memory limits set
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:49.043640036Z"
+  end_time: "2026-10-22T11:30:49.045076908Z"
+  task_runtime: 0.001436872
+- name: non_root_containers
+  status: failed
+  message: Found containers running as root user or with root group membership
+  type: essential
+  points: 0
+  start_time: "2026-10-22T11:30:49.051067316Z"
+  end_time: "2026-10-22T11:30:49.585465572Z"
+  task_runtime: 0.534398256
+  remediation:
+  - If your application does not need root privileges, make sure to define runAsNonRoot
+    as true or explicitly set the runAsUser using ID 1000 or higher under the PodSecurityContext
+    or container securityContext. In addition, set an explicit value for runAsGroup
+    using ID 1000 or higher.
+  impacted_resources:
+  - kind: Deployment
+    name: duranta-flexric
+    namespace: oai-cnti
+    reason: spec.template.spec.securityContext.runAsUser should be 1000
+  - kind: Deployment
+    name: duranta-flexric
+    namespace: oai-cnti
+    reason: spec.template.spec.securityContext.runAsGroup should be 1000
+- name: hostpath_mounts
+  status: passed
+  message: Containers do not have hostPath mounts
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:49.598356482Z"
+  end_time: "2026-10-22T11:30:53.049096640Z"
+  task_runtime: 3.450740158
+- name: latest_tag
+  status: passed
+  message: Container images are not using the latest tag
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:53.071059474Z"
+  end_time: "2026-10-22T11:30:53.779052507Z"
+  task_runtime: 0.707993033
+- name: hostport_not_used
+  status: passed
+  message: HostPort is not used
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:53.792063450Z"
+  end_time: "2026-10-22T11:30:53.831773038Z"
+  task_runtime: 0.039709588
+- name: hardcoded_ip_addresses_in_k8s_runtime_configuration
+  status: passed
+  message: No hard-coded IP addresses found in the runtime K8s configuration
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:53.840683610Z"
+  end_time: "2026-10-22T11:30:53.841195050Z"
+  task_runtime: 0.00051144
+- name: log_output
+  status: passed
+  message: Resources output logs to stdout and stderr
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:53.861815790Z"
+  end_time: "2026-10-22T11:30:54.046494721Z"
+  task_runtime: 0.184678931
+  details:
+  - 'Deployment/duranta-flexric in oai-cnti: logs from duranta-flexric-5f79645d58-hggt5'
+- name: single_process_type
+  status: passed
+  message: Only one process type used
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:54.065969119Z"
+  end_time: "2026-10-22T11:30:54.967731552Z"
+  task_runtime: 0.901762433
+  details:
+  - 'Deployment/duranta-flexric container ric: no application process besides PID
+    1'
+- name: zombie_handled
+  status: passed
+  message: Zombie handled
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:30:54.980663529Z"
+  end_time: "2026-10-22T11:31:11.610883441Z"
+  task_runtime: 16.630219912
+  details:
+  - 'Zombie probe started in 1 container(s): Deployment/duranta-flexric container
+    3c0829eee867'
+- name: sig_term_handled
+  status: passed
+  message: Sig Term handled
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:31:11.624803486Z"
+  end_time: "2026-10-22T11:31:29.044045444Z"
+  task_runtime: 17.419241958
+  details:
+  - 'Checked duranta-flexric-5f79645d58-hggt5/ric: PID 1 276531, judged pid(s) 276531,
+    grace 5s: 276531 stopped with SIGTERM'
+- name: specialized_init_system
+  status: failed
+  message: Containers do not use specialized init systems (ভ_ভ) ރ
+  type: essential
+  points: 0
+  start_time: "2026-10-22T11:31:29.491157669Z"
+  end_time: "2026-10-22T11:31:30.041866202Z"
+  task_runtime: 0.550708533
+  remediation:
+  - Use init systems that are purpose-built for containers like tini, dumb-init, catatonit,
+    s6-overlay, gopherd.
+  impacted_resources:
+  - kind: Pod
+    name: duranta-flexric-5f79645d58-hggt5
+    namespace: oai-cnti
+    container: ric
+    reason: '''nearRT-RIC'' as init process'
+- name: liveness
+  status: passed
+  message: All workload resources have at least one container with a liveness probe
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:31:30.063894604Z"
+  end_time: "2026-10-22T11:31:30.101940058Z"
+  task_runtime: 0.038045454
+  details:
+  - 'Deployment/duranta-flexric in oai-cnti: liveness probe on ric'
+- name: readiness
+  status: passed
+  message: All workload resources have at least one container with a readiness probe
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:31:30.117197895Z"
+  end_time: "2026-10-22T11:31:30.162136154Z"
+  task_runtime: 0.044938259
+  details:
+  - 'Deployment/duranta-flexric in oai-cnti: readiness probe on ric'
+- name: increase_decrease_capacity
+  status: passed
+  message: Replicas increased to deployed count + 2 and decreased back for 1 resource(s)
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:31:30.192131444Z"
+  end_time: "2026-10-22T11:31:43.374941866Z"
+  task_runtime: 13.182810422
+  details:
+  - 'Restart after scaling: one pod of each of 1 workload(s) deleted at once; 1 Ready
+    again within 7 s'
+summary:
+  total: 19
+  passed: 17
+  failed: 2
+  skipped: 0
+  na: 0
+  error: 0
+  max_passed: 19
+  essential_passed: 17
+  essential_max_passed: 19
+  points: 1700
+  maximum_points: 1900
+  criteria:
+  - group: cert
+    scope: essential
+    min_passed: 15
+    min_ratio:
+    declared_count: 19
+    max_failed:
+    passed_count: 17
+    max_passed: 19
+    failed_count: 2
+    passed: true

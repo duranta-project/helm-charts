@@ -1,0 +1,3 @@
+1. Get the application name by running these commands:
+  export FLEXRIC_POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "duranta-flexric.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+2. RAN functions reach the RIC on E2 (SCTP 36421) at config.ricHost. With multus enabled, set config.ricHost of the gNB/CU/DU to the RIC E2 address ({{ if .Values.multus.enabled }}{{ range .Values.multus.interfaces }}{{ if .enabled }}{{ .ipAdd }} {{ end }}{{ end }}{{ else }}the duranta-flexric service is fine without multus{{ end }}).

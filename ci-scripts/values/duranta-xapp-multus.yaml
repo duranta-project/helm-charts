@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MIT
+#
+# Multus override for duranta-xapp (all xApps of the test use it):
+#
+#   E2/E42:      192.168.85.0/24  -> xApp: 192.168.85.96 (FlexRIC is .90)
+#
+# The RIC binds E42 to its E2 address, so the xApp needs an interface on that network and ricHost = RIC E2 IP.
+# Several xApps running at the same time need one address each: runE2ETests.py gives the xApps consecutive
+# addresses starting from this ipAdd.
+
+config:
+  ricHost: "192.168.85.90"
+multus:
+  enabled: true
+  interfaces:
+    - name: "e2"
+      hostInterface: "eth0"
+      ipAdd: "192.168.85.96"
+      netmask: "24"
+      enabled: true
+      type: macvlan
+      mode: "bridge"

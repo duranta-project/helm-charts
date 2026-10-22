@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: MIT
+#
+# Values for the Grafana chart (https://github.com/grafana-community/helm-charts; it replaces the deprecated
+# grafana/grafana chart of https://github.com/grafana/helm-charts, same values) to show the data of the
+# duranta-xapp xApps, the same setup as FlexRIC's grafana/ directory (SQLite datasource + "KPI measurements"
+# dashboard):
+#
+#   helm repo add grafana-community https://grafana-community.github.io/helm-charts
+#   helm install grafana grafana-community/grafana -f charts/duranta-xapp/grafana/values.yaml
+#
+# Grafana reads the SQLite file the xApp with db.name=xapp_db writes into the shared PVC created by
+# duranta-flexric (xappDb.enabled). The PVC is mounted at /xapp_db_dir, as in FlexRIC's docker-compose.
+
+# Role instead of ClusterRole: Grafana only needs its own namespace, and nothing is left outside it on uninstall
+rbac:
+  namespaced: true
+
+plugins:
+  - frser-sqlite-datasource
+
+grafana.ini:
+  dashboards:
+    min_refresh_interval: 1s
+
+extraVolumes:
+  - name: xapp-db
+    existingClaim: duranta-flexric-xapp-db
+extraVolumeMounts:
+  - name: xapp-db
+    mountPath: /xapp_db_dir
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: SQLite
+        type: frser-sqlite-datasource
+        uid: flexric-sqlite              # the uid the FlexRIC dashboard panels use
+        access: proxy
+        isDefault: true
+        editable: true
+        jsonData:
+          path: /xapp_db_dir/xapp_db
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: flexric
+        orgId: 1
+        folder: FlexRIC
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/flexric
+
+dashboards:
+  flexric:
+    kpi-measurements:
+      # FlexRIC "KPI measurements" dashboard (E2SM-RC, E2SM-KPM and E2SM-CCC panels). Without internet access,
+      # replace url by json: <dashboard JSON> (e.g. --set-file dashboards.flexric.kpi-measurements.json=<file>).
+      url: https://raw.githubusercontent.com/duranta-project/flexric/dev/grafana/dashboards/grafana-dashboard.json

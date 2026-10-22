@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: MIT
+
+# Kubernetes distribution selector
+# - "Vanilla"   → Community Kubernetes
+# - "Openshift" → Red Hat OpenShift (requires UBI images)
+kubernetesDistribution: Vanilla
+
+# du container image configuration
+nfimage:
+  repository: docker.io/oaisoftwarealliance/oai-gnb
+  version: develop       # Image tag (or "develop" for latest dev build)
+  pullPolicy: IfNotPresent  # Options: IfNotPresent, Always, Never
+
+# Image pull secrets (useful for private registries or DockerHub rate limits)
+# imagePullSecrets:
+#  - name: "regcred"
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Service type is fixed to ClusterIP (only for non-Multus interfaces, i.e., eth0)
+
+# ───────────────────────────────────────────────
+# Supported deployment modes:
+# 1. RF-Simulated du (RFsim):
+#    - Only one interface required (F1C/U) or use Kubernetes default (eth0).
+# 2. For E1 split (CU-CP/UP - DU) you can use dedicated F1C/F1U or just F1
+#    - F1C can still use eth0, or you can dedicate separate interface
+#    - F1U can still use eth0 or F1C interface or you can dedicate separate subnet
+# 3. For F1 split (CU-DU) you can use just one dedicated F1 interface or Kubernetes default (eth0)
+# 4. Physical du with Ethernet-based USRP/RRU:
+#    - Requires ruInterface for RU connection.
+# 5. There can be only one entry of defaultRoute
+# 6. Only Interface type macvlan and vlan are supported, to support type vlan:
+#    - change to type vlan
+#    - add vlan
+#    - add gateway (optional)
+#
+# Note:
+# - For USRP B210 you must mount USB devices from the host.
+# - Adapt the IP addresses to your lab environment.
+# ───────────────────────────────────────────────
+
+# If a particular interface is commented then it won't be created and instead of it eth0 will be used.
+
+## Don't change the order of the interface names
+multus:
+  enabled: false
+  interfaces:
+    - name: "f1c"
+      hostInterface: "eth0"
+      ipAdd: "172.21.6.90"
+      enabled: true
+      netmask: "22"
+      defaultRoute: "172.21.7.254"
+      type: macvlan
+      mode: "bridge"
+    - name: "f1u"
+      hostInterface: "eth0"
+      ipAdd: "172.21.16.90"
+      enabled: true
+      netmask: "22"
+      type: macvlan
+      mode: "bridge"
+    - name: "e2"
+      hostInterface: "eth0"
+      ipAdd: "192.168.85.91"
+      enabled: true
+      netmask: "24"
+      type: macvlan
+      mode: "bridge"
+    - name: "ru"
+      hostInterface: "eth0"
+      enabled: true
+      ipAdd: "192.168.80.90"
+      netmask: "24"
+      gateway: "192.168.80.1"
+      type: macvlan
+      mode: "bridge"
+      mtu: 1500
+
+## If you want to change more configuration parameters then you should mount the config file
+# in templates/configmap.yaml
+# Example config files --> https://gitlab.eurecom.fr/oai/openairinterface5g/-/tree/develop/targets/PROJECTS/GENERIC-NR-5GC/CONF
+config:
+  ## Pod interface per traffic type; empty = auto from multus.interfaces names.
+  ## Several can point to the same interface, e.g. one multus interface carrying all traffic.
+  f1cIfName: ""
+  f1uIfName: ""
+  timeZone: "Europe/Paris"
+  useAdditionalOptions: "-E --rfsim --log_config.global_log_options level,nocolor,time"
+  duName: "oai-rfsim"
+  usrp: "rfsim"  # Options: rfsim, b2xx, n3xx, x3xx
+  cuHost: "oai-cu" ## Ip-address or hostname
+  enableE2: false
+  f1duPort: 2153
+  ricHost: "duranta-flexric"
+  gdbstack: 1     # 1 to see gdb traces
+  tac: 1
+  plmn_list:
+  - mcc: "001"   # Must match AMF/SMF/UPF
+    mnc: "01"
+    mnc_length: "2"
+    snssaiList:
+      - sst: "1"
+        sd: "0xffffff"
+
+# Debugging options
+start:
+  du: true       # If false → NF container sleeps (for manual debugging)
+  tcpdump: false  # Enable tcpdump container inside pod
+
+includeTcpDumpContainer: false  # If true, add tcpdump sidecar for debugging
+
+# Pod security context
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+
+securityContext:
+ capabilities:
+    add:
+     - SYS_NICE
+    drop:
+     - ALL
+
+# Tcpdump sidecar image (if enabled)
+tcpdumpimage:
+  repository: docker.io/oaisoftwarealliance/oai-tcpdump-init
+  version: alpine-3.20
+  pullPolicy: IfNotPresent
+
+# Resource requests and limits
+# See:
+# https://kubernetes.io/docs/concepts/configuration/manage-resources-containers
+# https://kubernetes.io/docs/concepts/workloads/pods/pod-qos
+resources:
+  define: true
+  limits:
+    nf:
+      cpu: 4000m
+      memory: 4Gi
+    #If tcpdump container is disabled this value will not be used
+    tcpdump:
+      cpu: 200m
+      memory: 128Mi
+  requests:
+    nf:
+      cpu: 500m
+      memory: 512Mi
+    #If tcpdump container is disabled this value will not be used
+    tcpdump:
+      cpu: 100m
+      memory: 128Mi
+
+readinessProbe: true   # nr-softmodem is running
+livenessProbe: true
+
+# Scheduling options
+terminationGracePeriodSeconds: 5
+nodeSelector: {}
+nodeName:

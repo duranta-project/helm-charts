@@ -1,0 +1,154 @@
+# SPDX-License-Identifier: MIT
+
+# Kubernetes distribution selector
+# - "Vanilla"   → Community Kubernetes
+# - "Openshift" → Red Hat OpenShift (requires UBI images)
+kubernetesDistribution: Vanilla
+
+# cu-cp container image configuration
+nfimage:
+  repository: docker.io/oaisoftwarealliance/oai-gnb
+  version: 2026.w40       # Image tag (or "develop" for latest dev build)
+  pullPolicy: IfNotPresent  # Options: IfNotPresent, Always, Never
+
+# Image pull secrets (useful for private registries or DockerHub rate limits)
+# imagePullSecrets:
+#  - name: "regcred"
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Service type is fixed to ClusterIP (only for non-Multus interfaces, i.e., eth0)
+
+# ───────────────────────────────────────────────
+# Supported deployment modes:
+# 1. F1C, N2 and E1 can share the same virtual interface (optional).
+# 2. There can be only one entry of defaultRoute
+# 3. Only Interface type macvlan and vlan are supported, to support type vlan:
+#    - change to type vlan
+#    - add vlan
+#    - add gateway (optional)
+#
+# Note:
+# - Adapt the IP addresses to your lab environment.
+# ───────────────────────────────────────────────
+
+# If a particular interface is commented then it won't be created and instead of it eth0 will be used.
+
+multus:
+  enabled: false
+  interfaces:
+    - name: "n2"
+      hostInterface: "eth0"
+      ipAdd: "172.21.6.90"
+      netmask: "22"
+      defaultRoute: "172.21.7.254"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "f1c"
+      hostInterface: "eth0"
+      ipAdd: "172.21.8.91"
+      netmask: "22"
+      gateway: "172.21.11.254"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "e1"
+      hostInterface: "eth0"
+      ipAdd: "192.168.80.90"
+      netmask: "24"
+      gateway: "192.168.80.1"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "e2"
+      hostInterface: "eth0"
+      ipAdd: "192.168.85.93"
+      enabled: true
+      netmask: "24"
+      type: macvlan
+      mode: "bridge"
+
+## configuration file is in template/config.yaml
+## It is taken from https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/ci-scripts/conf_files/gnb-cucp.sa.f1.conf
+config:
+  timeZone: "Europe/Paris"
+  useAdditionalOptions: "--log_config.global_log_options level,nocolor,time"
+  cucpName: "oai-cu-cp"
+  amfHost: "oai-amf"  # amf ip-address or service-name oai-amf or 172.21.6.94
+  enableE2: false
+  ricHost: "duranta-flexric"
+  f1uPort: 2153
+  ## Pod interface per traffic type; empty = auto from multus.interfaces names (f1c/n2/e1, falling back to each other, then eth0).
+  ## Several can point to the same interface, e.g. one multus interface "net1" carrying F1-C, N2 and E1.
+  f1cIfName: ""
+  n2IfName: ""
+  e1IfName: ""
+  gdbstack: 1     # 1 to see gdb traces
+  tac: 1
+  plmn_list:
+  - mcc: "001"   # Must match AMF/SMF/UPF
+    mnc: "01"
+    mnc_length: "2"
+    snssaiList:
+      - sst: "1"
+        sd: "0xffffff"
+# Debugging options
+start:
+  oaicucp: true       # If false → NF container sleeps (for manual debugging)
+  tcpdump: false  # Enable tcpdump container inside pod
+
+includeTcpDumpContainer: false  # If true, add tcpdump sidecar for debugging
+
+# Pod security context
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+
+securityContext:
+ capabilities:
+    add:
+     - SYS_NICE
+     - IPC_LOCK
+    drop:
+     - ALL
+
+# Tcpdump sidecar image (if enabled)
+tcpdumpimage:
+  repository: docker.io/oaisoftwarealliance/oai-tcpdump-init
+  version: alpine-3.20
+  pullPolicy: IfNotPresent
+
+# Resource requests and limits
+# See:
+# https://kubernetes.io/docs/concepts/configuration/manage-resources-containers
+# https://kubernetes.io/docs/concepts/workloads/pods/pod-qos
+resources:
+  define: true
+  limits:
+    nf:
+      cpu: 1000m
+      memory: 1Gi
+    #If tcpdump container is disabled this value will not be used
+    tcpdump:
+      cpu: 100m
+      memory: 128Mi
+  requests:
+    nf:
+      cpu: 100m
+      memory: 256Mi
+    #If tcpdump container is disabled this value will not be used
+    tcpdump:
+      cpu: 100m
+      memory: 128Mi
+
+readinessProbe: true   # nr-softmodem is running
+livenessProbe: true
+
+# Scheduling options
+terminationGracePeriodSeconds: 5
+nodeSelector: {}
+nodeName:

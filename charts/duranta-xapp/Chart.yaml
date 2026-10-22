@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+
+apiVersion: v2
+name: duranta-xapp
+description: FlexRIC xApps (KPM, RC, KPM+RC and GTP/MAC/RLC/PDCP monitoring), one xApp per release
+type: application
+icon: https://raw.githubusercontent.com/duranta-project/governance/main/logos/Duranta-Colour-500.png
+version: 3.0.0
+appVersion: develop
+
+keywords:
+  - FlexRIC
+  - xApp
+
+sources:
+  - https://github.com/duranta-project/flexric
+
+maintainers:
+  - name:  OPENAIRINTERFACE
+    email: oaicicdteam@openairinterface.org

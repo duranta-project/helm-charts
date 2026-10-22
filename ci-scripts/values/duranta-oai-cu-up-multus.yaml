@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: MIT
+#
+#   E2  (E2AP):  192.168.85.0/24  -> 192.168.85.94 (FlexRIC is .90)
+#
+# Multus override for duranta-oai-cu-up — dedicated subnets matching the core override:
+#
+#   N3  (GTP):   10.10.5.0/24     → CU-UP: 10.10.5.5     (UPF is .2)
+#   F1-U (GTP):  172.21.16.0/22   → CU-UP: 172.21.16.93  (DU F1-U is .92)
+#   E1  (E1AP):  192.168.80.0/24  → CU-UP: 192.168.80.91 (CU-CP is .90)
+#
+# cucpHost points to the CU-CP E1 multus IP because the CU-CP listens for E1 only there.
+
+config:
+  ricHost: "192.168.85.90"   # FlexRIC E2 multus address (used with config.enableE2)
+  cucpHost: "192.168.80.90"
+multus:
+  enabled: true
+  interfaces:
+    - name: "n3"
+      hostInterface: "eth0"
+      ipAdd: "10.10.5.5"
+      netmask: "24"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "f1u"
+      hostInterface: "eth0"
+      ipAdd: "172.21.16.93"
+      netmask: "22"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "e1"
+      hostInterface: "eth0"
+      ipAdd: "192.168.80.91"
+      netmask: "24"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+    - name: "e2"
+      hostInterface: "eth0"
+      ipAdd: "192.168.85.94"
+      netmask: "24"
+      enabled: true
+      type: macvlan
+      mode: "bridge"

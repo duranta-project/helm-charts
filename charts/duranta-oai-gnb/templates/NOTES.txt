@@ -1,0 +1,6 @@
+1. Get the application name by running these commands:
+  export GNB_POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "oai-gnb.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export GNB_eth0_IP=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "oai-gnb.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[*].status.podIP}")
+2. Dockerhub images of duranta-openairinterface5g requires avx2 (x86) capabilities in the cpu and they are built for ARM-N2/x86 architecture.
+3. In case you want to test these charts with USRP/RU then make sure your underlying kernel is realtime and CPU sleep states are off.
+   Also for good performance it is better to use MTU 9000 for Fronthaul interface.

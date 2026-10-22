@@ -1,0 +1,156 @@
+# SPDX-License-Identifier: MIT
+
+# Kubernetes distribution selector
+# - "Vanilla"   → Community Kubernetes
+# - "Openshift" → Red Hat OpenShift (requires UBI images)
+kubernetesDistribution: Vanilla
+
+# gNB container image configuration
+nfimage:
+  repository: docker.io/oaisoftwarealliance/oai-gnb-fhi72
+  version: 2026.w40      # Image tag (or "develop" for latest dev build)
+  pullPolicy: IfNotPresent  # Options: IfNotPresent, Always, Never
+
+# Image pull secrets (useful for private registries or DockerHub rate limits)
+imagePullSecrets:
+ - name: "regcred"
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Service type is fixed to ClusterIP (only for non-Multus interfaces, i.e., eth0)
+
+# ───────────────────────────────────────────────
+# Supported deployment modes:
+# 1. If AMF is in the same cluster as gNB then use eth0 interface for N2+N3 else create one interface for N2
+#    - Only one interface required (N2 + N3) → use Kubernetes default (eth0).
+# 2. Physical gNB with O-RUs, the gNB will use DPDK:
+#    - Requires ruInterface for RU connection.
+#    - N2/N3 can still use eth0, or you can dedicate separate interfaces.
+# 3. N2 and N3 can share the same virtual interface (optional).
+# 4. There can be only one entry of defaultRoute
+# 5. Only Interface type macvlan and vlan are supported, to support type vlan:
+#    - change to type vlan
+#    - add vlan
+#    - add gateway (optional)
+# Note:
+# - For USRP B210 you must mount USB devices from the host.
+# - Adapt the IP addresses to your lab environment.
+# ───────────────────────────────────────────────
+
+# If a particular interface is commented then it won't be created and instead of it eth0 will be used.
+
+multus:
+  enabled: true
+  interfaces:
+    - name: "n2"
+      enabled: true
+      type: macvlan
+      hostInterface: "br-ex"
+      ipAdd: "172.21.10.1"
+      netmask: "22"
+      defaultRoute: "172.21.11.254"
+      mode: "bridge"
+    - name: "n3"
+      enabled: false
+      type: macvlan
+      hostInterface: "br-ex"
+      ipAdd: "172.21.7.91"
+      netmask: "22"
+      gateway: "172.21.7.254"
+      mode: "bridge"
+    - name: "uplane1"
+      enabled: true
+      type: sriov
+      mac: "00:11:22:33:44:66"
+      sriovNetworkNamespace: "sriov-network-operator"
+      sriovResourceName: "ruvfiou"
+      vlan: "3"
+    - name: "cplane1"
+      enabled: true
+      mac: "00:11:22:33:44:67"
+      type: sriov
+      sriovNetworkNamespace: "sriov-network-operator"
+      sriovResourceName: "ruvfioc"
+      vlan: "3"
+
+# gNB runtime configuration (config file is mounted via config.yaml file)
+# Reference examples:
+# https://gitlab.eurecom.fr/oai/openairinterface5g/-/tree/develop/targets/PROJECTS/GENERIC-NR-5GC/CONF
+config:
+  ## Pod interface per traffic type; empty = auto from multus.interfaces names.
+  ## Several can point to the same interface, e.g. one multus interface carrying all traffic.
+  n2IfName: ""
+  n3IfName: ""
+  timeZone: "Europe/Paris"
+  useAdditionalOptions: "--log_config.global_log_options level,nocolor,time"
+  gnbName: "oai-gnb"
+  gdbstack: "0"     # 1 to see gdb traces
+  enableE2: false
+  ricHost: "duranta-flexric"
+  amfHost: "127.0.0.1" #oai-amf"   # AMF service name or IP (e.g., oai-amf / 172.21.6.94)
+  tac: 1
+  ruCPlaneMacAdd: 70:b3:d5:e1:5b:81
+  ruUPlaneMacAdd: 70:b3:d5:e1:5b:81
+  plmn_list:
+  - mcc: 001   # Must match AMF/SMF/UPF
+    mnc: 01
+    mnc_length: 2
+    snssaiList:
+      - sst: "1"
+        sd: "0xffffff"
+# Debugging options
+start:
+  gnb: true      # If false → NF container sleeps (for manual debugging)
+
+##Only for the NF container
+securityContext:
+  privileged: false
+  capabilities:
+    add:
+     - IPC_LOCK
+     - SYS_NICE
+     - SYS_ADMIN
+    drop:
+     - ALL
+
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+
+# ───────────────────────────────────────────────
+# Only needed for 7.2 O-RUs which requires DPDK enabled interfaces
+#
+# Needed 8 CPUs for 2x2 configuration and 14 CPUs for 4x4 configuration
+# If you have two dedicated interfaces for C and U plane then you should have
+# two claims
+#
+# ────────────────────────────────────────────────
+
+resources:
+  define: true
+  limits:
+    cpu: 14
+    memory: 5Gi
+    hugepages: 8Gi
+    sriovClaims:
+      - name: openshift.io/ruvfioc
+        quantity: 1
+      - name: openshift.io/ruvfiou
+        quantity: 1
+  requests:
+    cpu: 14
+    memory: 5Gi
+    hugepages: 8Gi
+    sriovClaims:
+      - name: openshift.io/ruvfioc
+        quantity: 1
+      - name: openshift.io/ruvfiou
+        quantity: 1
+
+# Scheduling options
+terminationGracePeriodSeconds: 5
+nodeSelector: {}
+nodeName:

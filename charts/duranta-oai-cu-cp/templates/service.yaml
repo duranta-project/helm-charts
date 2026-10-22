@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: oai-cu
+  labels:
+    app: {{ .Release.Name }}
+    {{- include "oai-cu-cp.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: n2
+      port: 36412
+      targetPort: 36412
+      protocol: SCTP
+    - name: e1
+      port: 38462
+      targetPort: 38462
+      protocol: SCTP
+  selector:
+    {{- include "oai-cu-cp.selectorLabels" . | nindent 4 }}

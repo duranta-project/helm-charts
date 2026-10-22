@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: MIT
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-configmap
+  labels:
+    app: {{ .Release.Name }}
+data:
+  flexric.conf: |
+      [NEAR-RIC]
+      NEAR_RIC_IP = @E2_IP@
+      [XAPP]
+      DB_DIR = /flexric/
+      DB_NAME = xapp_db

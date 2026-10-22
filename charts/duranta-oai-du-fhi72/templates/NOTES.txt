@@ -1,0 +1,4 @@
+1. Get the application name by running these commands:
+  export GNB_DU_POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "oai-du.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export GNB_DU_eth0_IP=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "oai-du.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[*].status.podIP}")
+2. Dockerhub images of duranta-openairinterface5g requires avx2 (x86) capabilities in the cpu and they are built for ARM-N2/x86 architecture.

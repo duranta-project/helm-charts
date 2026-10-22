@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: MIT
+
+# Kubernetes distribution selector
+# - "Vanilla"   → Community Kubernetes
+# - "Openshift" → Red Hat OpenShift
+kubernetesDistribution: Vanilla
+
+# Which xApp this release runs, one of the keys of "xapps" below:
+#   helm install xapp-kpm charts/duranta-xapp --set xapp=kpm
+xapp: kpm
+
+# xApps of the FlexRIC CI scenario (ci-scripts/yaml_files/5g_rfsimulator_flexric): name -> binary in the FlexRIC image.
+# More binaries of the image can be added here (e.g. slice: /usr/local/flexric/xApp/c/slice/xapp_slice_moni_ctrl).
+xapps:
+  kpm: /usr/local/flexric/xApp/c/monitor/xapp_kpm_moni                           # KPM monitoring
+  rc: /usr/local/flexric/xApp/c/monitor/xapp_rc_moni                             # RC monitoring
+  kpm-rc: /usr/local/flexric/xApp/c/kpm_rc/xapp_kpm_rc                           # KPM monitoring + RC control
+  gtp-mac-rlc-pdcp: /usr/local/flexric/xApp/c/monitor/xapp_gtp_mac_rlc_pdcp_moni # GTP, MAC, RLC and PDCP monitoring
+
+# The xApps are part of the FlexRIC image
+nfimage:
+  repository: docker.io/oaisoftwarealliance/oai-flexric
+  version: develop
+  pullPolicy: IfNotPresent
+
+# Image pull secrets (useful for private registries or DockerHub rate limits)
+# imagePullSecrets:
+#  - name: "regcred"
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+config:
+  timeZone: "Europe/Paris"
+  # nearRT-RIC the xApp connects to (E42, SCTP 36422): service name or IP. The RIC listens on its E2 address only,
+  # so with FlexRIC on multus use the RIC's E2 multus IP and give the xApp an interface on that network below.
+  ricHost: "duranta-flexric"
+
+# Write the received data into the shared SQLite volume of duranta-flexric (xappDb.enabled), so Grafana can show it.
+# FlexRIC aborts when two xApps write the same SQLite file at once, so every release uses its own file:
+#   name: ""        -> xapp_db_<xapp>  (e.g. xapp_db_rc)
+#   name: xapp_db   -> the file the Grafana datasource reads (charts/duranta-xapp/grafana/values.yaml);
+#                      give it to one xApp only, normally kpm (KPM panels) or rc (RC panels)
+# The RIC, the xApps and Grafana must run on the same node (SQLite WAL mode).
+db:
+  enabled: false
+  claimName: duranta-flexric-xapp-db
+  name: ""
+
+# Optional interface on the RIC's E2/E42 network (only needed when FlexRIC uses multus)
+multus:
+  enabled: false
+  interfaces:
+    - name: "e2"
+      hostInterface: "eth0"
+      ipAdd: "192.168.85.96"
+      netmask: "24"
+      enabled: true
+      type: macvlan
+      mode: "bridge"
+
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+
+resources:
+  define: true    # measured with a UE: up to ~350m CPU and ~65Mi (gtp-mac-rlc-pdcp); a throttled xApp answers late and leaves FlexRIC stuck on its subscription delete
+  limits:
+    cpu: 1000m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+terminationGracePeriodSeconds: 5
+nodeSelector: {}
+nodeName:

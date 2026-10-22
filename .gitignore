@@ -1,0 +1,11 @@
+*claude*
+*codex*
+
+# helm packages / archives, never commit
+dist/
+*.tgz
+*.tar
+*.tar.gz
+
+# CNTi Test Suite tools and state (lfn-cnti/runCNTI.sh)
+lfn-cnti/.work/

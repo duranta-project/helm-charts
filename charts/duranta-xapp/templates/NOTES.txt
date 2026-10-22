@@ -1,0 +1,7 @@
+xApp "{{ .Values.xapp }}" ({{ get .Values.xapps .Values.xapp }}) connects to the nearRT-RIC at {{ .Values.config.ricHost }} (E42, SCTP 36422).
+
+Follow its output:
+  kubectl logs -n {{ .Release.Namespace }} -f deploy/{{ include "duranta-xapp.fullname" . }}
+
+Run another xApp next to it with another release name, e.g.:
+  helm install xapp-rc charts/duranta-xapp --set xapp=rc

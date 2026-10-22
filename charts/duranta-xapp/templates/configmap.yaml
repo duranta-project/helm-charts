@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MIT
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "duranta-xapp.fullname" . }}-configmap
+  labels:
+    {{- include "duranta-xapp.labels" . | nindent 4 }}
+data:
+  # same as the flexric.conf of the FlexRIC CI scenario (5g_rfsimulator_flexric);
+  # @RIC_IP@ is replaced at start-up with the resolved config.ricHost
+  flexric.conf: |
+    [NEAR-RIC]
+    NEAR_RIC_IP = @RIC_IP@
+
+    [XAPP]
+    {{- if .Values.db.enabled }}
+    DB_DIR = /xapp_db_dir/
+    DB_NAME = {{ .Values.db.name | default (printf "xapp_db_%s" .Values.xapp) }}
+    {{- else }}
+    DB_DIR = /tmp/
+    {{- end }}

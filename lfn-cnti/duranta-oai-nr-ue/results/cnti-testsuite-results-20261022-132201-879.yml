@@ -1,0 +1,223 @@
+---
+name: cnti testsuite
+testsuite_version: v2.3.0
+schema_version: 1
+status: passed
+command: /tmp/claude-1001/-home-sagar-oai-orange-charts/473fc2c1-016e-4ced-8038-3e649cb60436/scratchpad/cnti/cnti-testsuite
+  cert --skip increase_decrease_capacity --results-dir /home/sagar/oai/orange/charts/lfn-cnti/oai-nr-ue/results
+exit_code: 0
+tools:
+  kubescape: 4.0.12
+  kubescape_framework: nsa
+  kubescape_regolibrary: 2.0.38
+  kyverno: 1.19.1
+  kyverno_policies: release-1.19
+  litmus: 3.31.0
+items:
+- name: node_drain
+  status: passed
+  message: 'node_drain passed: 1 node(s) drained, 1 workload(s) rescheduled'
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:02.101673058Z"
+  end_time: "2026-10-22T11:22:34.875038539Z"
+  task_runtime: 32.773365481
+  details:
+  - 'Node minikube-m02: 1 pod(s) of 1 workload(s) evicted in 2 s'
+  - 'Deployment/duranta-oai-nr-ue in oai-cnti: Ready again on another node within
+    8 s of eviction'
+- name: selinux_options
+  status: passed
+  message: Pods do not set seLinuxOptions
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:34.888538621Z"
+  end_time: "2026-10-22T11:22:37.919824122Z"
+  task_runtime: 3.031285501
+- name: container_sock_mounts
+  status: passed
+  message: Container engine daemon sockets are not mounted as volumes
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:37.935121620Z"
+  end_time: "2026-10-22T11:22:39.455070729Z"
+  task_runtime: 1.5199491090000001
+- name: privileged_containers
+  status: passed
+  message: No privileged containers
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:39.464160921Z"
+  end_time: "2026-10-22T11:22:39.531616480Z"
+  task_runtime: 0.067455559
+- name: cpu_limits
+  status: passed
+  message: Containers have CPU limits set
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:42.137770307Z"
+  end_time: "2026-10-22T11:22:42.142467227Z"
+  task_runtime: 0.00469692
+- name: memory_limits
+  status: passed
+  message: Containers have memory limits set
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:42.160741519Z"
+  end_time: "2026-10-22T11:22:42.165253100Z"
+  task_runtime: 0.004511581
+- name: non_root_containers
+  status: failed
+  message: Found containers running as root user or with root group membership
+  type: essential
+  points: 0
+  start_time: "2026-10-22T11:22:42.175339428Z"
+  end_time: "2026-10-22T11:22:43.162166120Z"
+  task_runtime: 0.986826692
+  remediation:
+  - If your application does not need root privileges, make sure to define runAsNonRoot
+    as true or explicitly set the runAsUser using ID 1000 or higher under the PodSecurityContext
+    or container securityContext. In addition, set an explicit value for runAsGroup
+    using ID 1000 or higher.
+  impacted_resources:
+  - kind: Deployment
+    name: duranta-oai-nr-ue
+    namespace: oai-cnti
+    reason: spec.template.spec.securityContext.runAsUser should be 1000
+  - kind: Deployment
+    name: duranta-oai-nr-ue
+    namespace: oai-cnti
+    reason: spec.template.spec.securityContext.runAsGroup should be 1000
+- name: hostpath_mounts
+  status: passed
+  message: Containers do not have hostPath mounts
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:43.182266228Z"
+  end_time: "2026-10-22T11:22:46.179983896Z"
+  task_runtime: 2.997717668
+- name: latest_tag
+  status: passed
+  message: Container images are not using the latest tag
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:46.225737112Z"
+  end_time: "2026-10-22T11:22:47.737319977Z"
+  task_runtime: 1.511582865
+- name: hostport_not_used
+  status: passed
+  message: HostPort is not used
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:47.753082096Z"
+  end_time: "2026-10-22T11:22:47.816943802Z"
+  task_runtime: 0.063861706
+- name: hardcoded_ip_addresses_in_k8s_runtime_configuration
+  status: passed
+  message: No hard-coded IP addresses found in the runtime K8s configuration
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:47.829295934Z"
+  end_time: "2026-10-22T11:22:47.830134697Z"
+  task_runtime: 0.000838763
+- name: log_output
+  status: passed
+  message: Resources output logs to stdout and stderr
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:47.857931805Z"
+  end_time: "2026-10-22T11:22:48.145045310Z"
+  task_runtime: 0.287113505
+  details:
+  - 'Deployment/duranta-oai-nr-ue in oai-cnti: logs from duranta-oai-nr-ue-6796785869-bkh45'
+- name: single_process_type
+  status: passed
+  message: Only one process type used
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:48.179970745Z"
+  end_time: "2026-10-22T11:22:51.170892497Z"
+  task_runtime: 2.990921752
+  details:
+  - 'Deployment/duranta-oai-nr-ue container nr-ue: process type nr-uesoftmodem'
+- name: zombie_handled
+  status: passed
+  message: Zombie handled
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:22:51.199352120Z"
+  end_time: "2026-10-22T11:23:10.767229925Z"
+  task_runtime: 19.567877805
+  details:
+  - 'Zombie probe started in 1 container(s): Deployment/duranta-oai-nr-ue container
+    bc95760ecdb5'
+- name: sig_term_handled
+  status: failed
+  message: Sig Term not handled
+  type: essential
+  points: 0
+  start_time: "2026-10-22T11:23:10.783457596Z"
+  end_time: "2026-10-22T11:23:39.869872062Z"
+  task_runtime: 29.086414466
+  remediation:
+  - Make the PID 1 container process to handle SIGTERM; enable process namespace sharing
+    in Kubernetes or use specialized Init system.
+  impacted_resources:
+  - kind: Pod
+    name: duranta-oai-nr-ue-6796785869-bkh45
+    namespace: oai-cnti
+    container: nr-ue
+    reason: 'killed instead of stopped: 179986 (killed with SIGKILL)'
+- name: specialized_init_system
+  status: passed
+  message: "Containers use specialized init systems \U0001F5A5️"
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:23:40.941343398Z"
+  end_time: "2026-10-22T11:23:42.226571497Z"
+  task_runtime: 1.285228099
+  details:
+  - 'Pod/duranta-oai-nr-ue-6796785869-bkh45 container nr-ue: init ''/tini'''
+- name: liveness
+  status: passed
+  message: All workload resources have at least one container with a liveness probe
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:23:42.274921835Z"
+  end_time: "2026-10-22T11:23:42.369043932Z"
+  task_runtime: 0.094122097
+  details:
+  - 'Deployment/duranta-oai-nr-ue in oai-cnti: liveness probe on nr-ue'
+- name: readiness
+  status: passed
+  message: All workload resources have at least one container with a readiness probe
+  type: essential
+  points: 100
+  start_time: "2026-10-22T11:23:42.401164647Z"
+  end_time: "2026-10-22T11:23:42.482887406Z"
+  task_runtime: 0.081722759
+  details:
+  - 'Deployment/duranta-oai-nr-ue in oai-cnti: readiness probe on nr-ue'
+summary:
+  total: 18
+  passed: 16
+  failed: 2
+  skipped: 0
+  na: 0
+  error: 0
+  max_passed: 18
+  essential_passed: 16
+  essential_max_passed: 18
+  points: 1600
+  maximum_points: 1800
+  criteria:
+  - group: cert
+    scope: essential
+    min_passed: 15
+    min_ratio:
+    declared_count: 19
+    max_failed:
+    passed_count: 16
+    max_passed: 19
+    failed_count: 2
+    passed: true

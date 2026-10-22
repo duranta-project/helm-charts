@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# CNTi Test Suite (https://github.com/lfn-cnti/testsuite) configuration: Duranta OAI CU-CP
+# Run with lfn-cnti/runCNTI.sh duranta-oai-cu-cp; the core runs outside the CNF in namespace oai-core
+config_version: "v2"
+common:
+  # bind-any and loopback addresses
+  hardcoded_ip_exceptions:
+    - ip: 0.0.0.0
+    - ip: 127.0.0.1
+deployments:
+  helm_dirs:
+    - name: duranta-oai-cu-cp
+      helm_directory: ../../charts/duranta-oai-cu-cp
+      namespace: oai-cnti
+      helm_values: "--set config.amfHost=oai-amf.oai-core.svc.cluster.local"

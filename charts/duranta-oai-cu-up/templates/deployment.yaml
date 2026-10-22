@@ -1,0 +1,295 @@
+# SPDX-License-Identifier: MIT
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Release.Name }}
+    {{- include "oai-cu-up.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "oai-cu-up.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "oai-cu-up.selectorLabels" . | nindent 8 }}
+        app: {{ .Release.Name }}
+    {{- if and .Values.multus.enabled .Values.multus.interfaces }}
+      {{- $count := include "oai-cu-up.countDefaultRouteInterfaces" . | int }}
+      {{- if gt $count 1 }}
+      {{- fail (printf "(%d) enabled interfaces are using defaultRoute; only one is allowed." $count) }}
+      {{- end }}
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |-
+          [
+          {{- $first := true }}
+          {{- range .Values.multus.interfaces }}
+          {{- if .enabled }}
+            {{- if not $first }},{{- end }}
+            {
+              "name": "{{ $.Release.Name }}-{{ .name }}-{{ $.Chart.Name }}",
+              "interface": "{{ .name }}"
+              {{- if .mac }},
+              "mac": "{{ .mac }}"
+              {{- end }}
+              {{- if .defaultRoute }},
+              "default-route": ["{{ .defaultRoute }}"]
+              {{- end }}
+              {{- if .gateway }},
+              "gateway": "{{ .gateway }}"
+              {{- end }}
+            }
+            {{- $first = false }}
+          {{- end }}
+          {{- end }}
+          ]
+    {{- end }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ .Chart.Name }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeName }}
+      nodeName: {{ .Values.nodeName }}
+      {{- end }}
+      initContainers:
+      {{- if .Values.config.enableE2 }}
+        - name: wait-for-ric
+          image: docker.io/oaisoftwarealliance/oai-tcpdump-init:alpine-3.20
+          imagePullPolicy: IfNotPresent
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - until ping -c 1 {{ .Values.config.ricHost }}; do echo waiting for ric to start; sleep 1; done
+          resources:
+            requests: { cpu: "1m", memory: "50Mi" }
+            limits:   { cpu: "1m", memory: "50Mi" }
+      {{- end }}
+        - name: wait-cu-cp
+          image: docker.io/oaisoftwarealliance/oai-tcpdump-init:alpine-3.20
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - until ncat -zv {{ .Values.config.cucpHost }} 38462 --sctp ; do echo waiting for cucp to start; sleep 1; done
+          resources:
+            requests:
+              memory: 50Mi
+              cpu: 1m
+            limits:
+              memory: 50Mi
+              cpu: 1m
+        - name: config-patcher
+          image: docker.io/mikefarah/yq:4.47.2
+          command: [ "sh", "-c" ]
+          args:
+            - |
+              set -e
+              echo "Resolving hostnames and patching config..."
+              cp /tmp/config/config.yaml /tmp/config_patch/gnb.yaml
+              echo "$E1_IF_NAME,$N3_IF_NAME,$F1U_IF_NAME"
+              for i in $(seq 1 $MAX_RETRIES); do
+                echo "$CU_CP_HOST" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' && { export CU_CP_IP="$CU_CP_HOST"; break; }
+                CU_CP_IP=$(getent hosts "$CU_CP_HOST" | awk '{print $1}')
+                if [ -n "$CU_CP_IP" ]; then
+                  echo "Resolved CU_CP_IP=$CU_CP_IP"
+                  export CU_CP_IP
+                  break
+                fi
+                echo "[$i/$MAX_RETRIES] Waiting for $CU_CP_HOST to resolve..."
+                sleep $SLEEP_TIME
+              done
+
+              if [ -z "$CU_CP_IP" ]; then
+                echo "ERROR: Unable to resolve $CU_CP_HOST after $((MAX_RETRIES*SLEEP_TIME)) seconds"
+                exit 1
+              fi
+
+              {{- if .Values.config.enableE2 }}
+              for i in $(seq 1 $MAX_RETRIES); do
+                echo "$RIC_HOST" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' && { export RIC_IP="$RIC_HOST"; break; }
+                RIC_IP=$(getent hosts "$RIC_HOST" | awk '{print $1}')
+                if [ -n "$RIC_IP" ]; then
+                  echo "Resolved RIC_IP=$RIC_IP"
+                  export RIC_IP
+                  break
+                fi
+                echo "[$i/$MAX_RETRIES] Waiting for $RIC_HOST to resolve..."
+                sleep $SLEEP_TIME
+              done
+
+              if [ -z "$RIC_IP" ]; then
+                echo "ERROR: Unable to resolve $RIC_HOST after $((MAX_RETRIES*SLEEP_TIME)) seconds"
+                exit 1
+              fi
+              {{- end }}
+
+              export E1_IP=$(ip -f inet addr show $E1_IF_NAME | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*");
+              export N3_IP=$(ip -f inet addr show $N3_IF_NAME | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*");
+              export F1_IP=$(ip -f inet addr show $F1U_IF_NAME | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*");
+
+              echo "Resolved: CU_CP_IP=$CU_CP_IP, E1_IP=$E1_IP, N3_IP=$N3_IP, F1_IP=$F1_IP"
+
+              yq -i '
+                .Active_gNBs[0] = strenv(GNB_NAME) |
+                .gNBs[0].gNB_name = strenv(GNB_NAME) |
+                .gNBs[0].tracking_area_code = strenv(TAC) |
+                .gNBs[0].plmn_list = strenv(PLMN_LIST) |
+                .gNBs[].plmn_list |= (from_yaml) |
+                .gNBs[0].local_s_address = strenv(F1_IP) |
+                .gNBs[0].remote_s_address = "127.0.0.1" |
+                .gNBs[0].local_s_portd = strenv(F1_U_PORT) |
+                .gNBs[0].remote_s_portd = strenv(F1_U_PORT) |
+                {{- if .Values.config.enableE2 }}
+                .e2_agent.near_ric_ip_addr = strenv(RIC_IP) |
+                .e2_agent.sm_dir = "/usr/local/lib/flexric/" |
+                {{- else }}
+                del(.e2_agent) |
+                {{- end }}
+                .gNBs[0].E1_INTERFACE[0].ipv4_cucp = strenv(CU_CP_IP) |
+                .gNBs[0].E1_INTERFACE[0].ipv4_cuup = strenv(E1_IP) |
+                .gNBs[0].NETWORK_INTERFACES.GNB_IPV4_ADDRESS_FOR_NG_AMF = strenv(N3_IP) |
+                .gNBs[0].NETWORK_INTERFACES.GNB_IPV4_ADDRESS_FOR_NGU = strenv(N3_IP)
+              ' /tmp/config_patch/gnb.yaml
+              cat /tmp/config_patch/gnb.yaml
+          env:
+            - name: GNB_NAME
+              value: "{{ .Values.config.cuupName }}"
+            ## For resolving the hostname
+            - name: MAX_RETRIES
+              value: "10"
+            - name: SLEEP_TIME
+              value: "2"
+            - name: CU_CP_HOST
+              value: "{{ .Values.config.cucpHost }}"
+              {{- if .Values.config.enableE2 }}
+            - name: RIC_HOST
+              value: "{{ .Values.config.ricHost }}"
+              {{- end }}
+            - name: N3_IF_NAME
+              value: '{{ include "oai-cu-up.n3IfName" . }}'
+            - name: F1U_IF_NAME
+              value: '{{ include "oai-cu-up.f1uIfName" . }}'
+            - name: E1_IF_NAME
+              value: '{{ include "oai-cu-up.e1IfName" . }}'
+            - name: F1_U_PORT
+              value: "{{ .Values.config.f1uPort }}"
+            - name: TAC
+              value: "{{ .Values.config.tac }}"
+            - name: PLMN_LIST
+              value: |
+              {{ toYaml .Values.config.plmn_list | nindent 16 }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /tmp/config_patch
+            - name: configuration
+              mountPath: /tmp/config
+          resources:
+            requests: { cpu: "1m", memory: "50Mi" }
+            limits:   { cpu: "1m", memory: "50Mi" }
+      containers:
+        - name: oaicuup
+          image: "{{ .Values.nfimage.repository }}:{{ .Values.nfimage.version }}"
+          imagePullPolicy: {{ .Values.nfimage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /opt/oai-gnb/etc/
+          env:
+          - name: TZ
+            value: {{ .Values.config.timeZone | quote }}
+          - name: USE_ADDITIONAL_OPTIONS
+            value: {{ .Values.config.useAdditionalOptions | quote }}
+          - name: OAI_GDBSTACKS
+            value: {{ .Values.config.gdbstack | quote }}
+          {{- if .Values.resources.define }}
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.nf.cpu | quote }}
+              memory: {{ .Values.resources.requests.nf.memory | quote }}
+            limits:
+              cpu: {{ .Values.resources.limits.nf.cpu | quote }}
+              memory: {{ .Values.resources.limits.nf.memory | quote }}
+          {{- end }}
+          ports:
+          - containerPort: 2152
+            name: n3
+            protocol: UDP
+          - containerPort: 36412
+            name: n2
+            protocol: SCTP
+          - containerPort: {{ .Values.config.f1uPort }}
+            name: f1
+            protocol: UDP
+          {{- if and .Values.readinessProbe .Values.start.oaicuup }}
+          readinessProbe:
+            exec:
+              command: ["pgrep", "-f", "nr-cuup"]
+            initialDelaySeconds: 2
+            periodSeconds: 3
+          {{- end }}
+          {{- if and .Values.livenessProbe .Values.start.oaicuup }}
+          livenessProbe:
+            exec:
+              command: ["pgrep", "-f", "nr-cuup"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          {{- end }}
+          {{- if not .Values.start.oaicuup }}
+          command: [ "/bin/sleep", "infinity" ]
+          {{- end }}
+      {{- if .Values.includeTcpDumpContainer }}
+        - name: tcpdump
+          image: "{{ .Values.tcpdumpimage.repository }}:{{ .Values.tcpdumpimage.version }}"
+          imagePullPolicy: {{ .Values.tcpdumpimage.pullPolicy }}
+          {{- if .Values.resources.define}}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.tcpdump.memory | quote }}
+              cpu: {{ .Values.resources.requests.tcpdump.cpu | quote }}
+            limits:
+              memory: {{ .Values.resources.limits.tcpdump.memory | quote }}
+              cpu: {{ .Values.resources.limits.tcpdump.cpu | quote }}
+          {{- end}}
+          securityContext:
+             capabilities:
+                add:
+                 - NET_ADMIN
+                 - NET_RAW
+                drop:
+                 - ALL
+          {{- if .Values.start.tcpdump}}
+          command:
+            - /bin/sh
+            - -c
+            - mkdir -p /tmp/pcap && /usr/bin/tcpdump -i any -w /tmp/pcap/{{ .Chart.Name }}_`date +%Y-%m-%d_%H_%M-%S-%Z`.pcap
+          {{- else}}
+          command:
+            - /bin/sleep
+            - infinity
+          {{- end}}
+      {{- end}}
+
+      volumes:
+      - configMap:
+          name: {{ .Chart.Name }}-configmap
+        name: configuration
+      - name: shared-data
+        emptyDir: {}
+

@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: duranta-flexric
+  labels:
+    app: duranta-flexric
+    {{- include "duranta-flexric.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: e2
+      port: 36421
+      targetPort: 36421
+      protocol: SCTP
+    - name: e42
+      port: 36422
+      targetPort: 36422
+      protocol: SCTP
+  selector:
+    {{- include "duranta-flexric.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MIT
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-configmap
+  labels:
+    app: {{ .Release.Name }}
+data:
+{{ (.Files.Glob "config.yaml").AsConfig | indent 2 }}

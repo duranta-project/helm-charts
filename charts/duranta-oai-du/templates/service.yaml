@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: oai-ran
+  labels:
+    app: {{ .Release.Name }}
+    {{- include "oai-du.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: f1c
+      port: 38472
+      targetPort: 38472
+      protocol: SCTP
+    - name: f1u
+      port: 2153
+      targetPort: 2153
+      protocol: UDP
+  selector:
+    {{- include "oai-du.selectorLabels" . | nindent 4 }}

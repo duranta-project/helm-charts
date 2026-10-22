@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# CNTi Test Suite (https://github.com/lfn-cnti/testsuite) configuration: Duranta OAI gNB (monolithic)
+# Run with lfn-cnti/runCNTI.sh duranta-oai-gnb; the core runs outside the CNF in namespace oai-core
+config_version: "v2"
+common:
+  # placeholders of the config template, replaced at start with the pod's addresses
+  hardcoded_ip_exceptions:
+    - ip: 192.168.71.132
+    - ip: 192.168.71.140
+deployments:
+  helm_dirs:
+    - name: duranta-oai-gnb
+      helm_directory: ../../charts/duranta-oai-gnb
+      namespace: oai-cnti
+      helm_values: "--set config.amfHost=oai-amf.oai-core.svc.cluster.local"

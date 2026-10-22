@@ -1,0 +1,107 @@
+# SPDX-License-Identifier: MIT
+
+# Kubernetes distribution selector
+# - "Vanilla"   → Community Kubernetes
+# - "Openshift" → Red Hat OpenShift (requires UBI images)
+kubernetesDistribution: Vanilla
+
+# FlexRIC (near-RT RIC) container image configuration
+nfimage:
+  repository: docker.io/oaisoftwarealliance/oai-flexric
+  version: develop       # Image tag (or "develop" for latest dev build)
+  pullPolicy: IfNotPresent  # Options: IfNotPresent, Always, Never
+
+# Image pull secrets (useful for private registries or DockerHub rate limits)
+# imagePullSecrets:
+#  - name: "regcred"
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Service type is fixed to ClusterIP (only for non-Multus interfaces, i.e., eth0)
+
+# ───────────────────────────────────────────────
+# Multus: one extra interface for E2 (the RIC listens only on this address).
+# - Interface types: macvlan (default) and vlan (set type: vlan, add vlan: <id>, gateway optional).
+# - The E2 address is taken from the enabled interface named "e2" (else the first enabled one, else eth0).
+# - When multus is enabled, set config.ricHost of the gNB/CU/DU to this ipAdd: the "duranta-flexric"
+#   service resolves to the pod's eth0 address, where the RIC is not listening.
+# - Adapt the IP addresses to your lab environment.
+# ───────────────────────────────────────────────
+
+multus:
+  enabled: false
+  interfaces:
+    - name: "e2"
+      hostInterface: "eth0"
+      ipAdd: "192.168.85.90"
+      enabled: true
+      netmask: "24"
+      defaultRoute: "192.168.85.1"
+      type: macvlan
+      mode: "bridge"
+
+## RIC configuration file (flexric.conf) is in templates/configmap.yaml; NEAR_RIC_IP is filled with the E2 address
+config:
+  timeZone: "Europe/Paris"
+
+# Debugging section
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+
+start:
+  ric: true      # If false → RIC container sleeps (for manual debugging)
+  tcpdump: false
+
+includeTcpDumpContainer: false #If true it will add a tcpdump container inside network function pod for debugging
+
+# Tcpdump sidecar image (if enabled)
+tcpdumpimage:
+  repository: docker.io/oaisoftwarealliance/oai-tcpdump-init
+  version: alpine-3.20
+  pullPolicy: IfNotPresent
+
+# Resource requests and limits
+# See:
+# https://kubernetes.io/docs/concepts/configuration/manage-resources-containers
+# https://kubernetes.io/docs/concepts/workloads/pods/pod-qos
+resources:
+  define: true
+  limits:
+    nf:
+      cpu: 2000m
+      memory: 1Gi
+    #If tcpdump container is disabled this value will not be used
+    tcpdump:
+      cpu: 100m
+      memory: 128Mi
+  requests:
+    nf:
+      cpu: 500m
+      memory: 512Mi
+    #If tcpdump container is disabled this value will not be used
+    tcpdump:
+      cpu: 100m
+      memory: 128Mi
+
+
+readinessProbe: true   # nearRT-RIC is running
+livenessProbe: true
+
+# Shared xApp database volume. When enabled, the chart creates the PVC "duranta-flexric-xapp-db" and mounts it at
+# /xapp_db_dir. The duranta-xapp releases (db.enabled) write their SQLite databases into it and Grafana reads them
+# (see charts/duranta-xapp/README.md). SQLite uses WAL mode, so the RIC, the xApps and Grafana must run on the
+# same node.
+xappDb:
+  enabled: false
+  size: 1Gi
+  storageClass: ""          # empty = default storage class
+  accessMode: ReadWriteOnce
+
+# Scheduling options
+terminationGracePeriodSeconds: 5
+nodeSelector: {}
+nodeName:

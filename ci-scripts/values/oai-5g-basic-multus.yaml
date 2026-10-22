@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: MIT
+#
+# Multus override for oai-5g-basic — one dedicated subnet per interface plane:
+#
+#   N2  (NGAP):  172.21.6.0/22   → AMF:  172.21.6.90
+#   N3  (GTP):   10.10.5.0/24    → UPF:  10.10.5.2
+#   N4  (PFCP):  192.168.24.0/24 → UPF:  192.168.24.2  /  SMF: 192.168.24.3
+#
+# All interfaces use macvlan bridge over the node's eth0.
+# No defaultRoute is set — NFs reach each other via their multus subnet IPs;
+# SBI traffic continues over the pod's eth0 cluster network.
+
+oai-amf:
+  multus:
+    enabled: true
+    interfaces:
+      - name: "n2"
+        hostInterface: "eth0"
+        ipAdd: "172.21.6.90"
+        netmask: "22"
+        defaultRoute: ""
+        enabled: true
+        type: macvlan
+        mode: "bridge"
+      - name: "sbi"
+        enabled: false
+
+oai-upf:
+  multus:
+    enabled: true
+    interfaces:
+      - name: "n3"
+        hostInterface: "eth0"
+        ipAdd: "10.10.5.2"
+        netmask: "24"
+        defaultRoute: ""
+        enabled: true
+        type: macvlan
+        mode: "bridge"
+      - name: "n4"
+        hostInterface: "eth0"
+        ipAdd: "192.168.24.2"
+        netmask: "24"
+        defaultRoute: ""
+        enabled: true
+        type: macvlan
+        mode: "bridge"
+      - name: "n6"
+        enabled: false
+      - name: "n9"
+        enabled: false
+      - name: "sbi"
+        enabled: false
+
+oai-smf:
+  multus:
+    enabled: true
+    interfaces:
+      - name: "n4"
+        hostInterface: "eth0"
+        ipAdd: "192.168.24.3"
+        netmask: "24"
+        defaultRoute: ""
+        enabled: true
+        type: macvlan
+        mode: "bridge"
+      - name: "sbi"
+        enabled: false

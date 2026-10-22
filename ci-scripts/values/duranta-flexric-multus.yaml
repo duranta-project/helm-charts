@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: MIT
+#
+# Multus override for duranta-flexric:
+#
+#   E2  (E2AP):  192.168.85.0/24  → FlexRIC: 192.168.85.90 (gNB E2 is .91)
+#
+# The RIC listens only on this address, so the RAN uses it as config.ricHost (see duranta-oai-gnb-multus.yaml).
+
+multus:
+  enabled: true
+  interfaces:
+    - name: "e2"
+      hostInterface: "eth0"
+      ipAdd: "192.168.85.90"
+      netmask: "24"
+      enabled: true
+      type: macvlan
+      mode: "bridge"

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# CNTi Test Suite (https://github.com/lfn-cnti/testsuite) configuration: Duranta OAI NR-UE (RF simulator)
+# Run with lfn-cnti/runCNTI.sh duranta-oai-nr-ue; the core (oai-core) and a gNB (oai-cnti-deps) run outside the CNF
+config_version: "v2"
+deployments:
+  helm_dirs:
+    - name: duranta-oai-nr-ue
+      helm_directory: ../../charts/duranta-oai-nr-ue
+      namespace: oai-cnti
+      helm_values: "--set config.rfSimServer=oai-ran.oai-cnti-deps.svc.cluster.local"

@@ -1,0 +1,307 @@
+# SPDX-License-Identifier: MIT
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Release.Name }}
+    {{- include "oai-du.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "oai-du.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "oai-du.selectorLabels" . | nindent 8 }}
+        app: {{ .Release.Name }}
+      annotations:
+    {{- if eq .Values.kubernetesDistribution "Openshift" }}
+        cpu-quota.crio.io: "disable"
+    {{- end }}
+    {{- if and .Values.multus.enabled .Values.multus.interfaces }}
+      {{- $count := include "oai-du.countDefaultRouteInterfaces" . | int }}
+      {{- if gt $count 1 }}
+      {{- fail (printf "(%d) enabled interfaces are using defaultRoute; only one is allowed." $count) }}
+      {{- end }}
+        k8s.v1.cni.cncf.io/networks: |-
+          [
+          {{- $first := true }}
+          {{- range .Values.multus.interfaces }}
+          {{- if .enabled }}
+            {{- if not $first }},{{- end }}
+            {
+              "name": "{{ $.Release.Name }}-{{ .name }}-{{ $.Chart.Name }}",
+              "interface": "{{ .name }}"
+              {{- if .defaultRoute }},
+              "default-route": ["{{ .defaultRoute }}"]
+              {{- end }}
+              {{- if .mac }},
+              "mac": "{{ .mac }}"
+              {{- end }}
+              {{- if .gateway }},
+              "gateway": "{{ .gateway }}"
+              {{- end }}
+            }
+            {{- $first = false }}
+          {{- end }}
+          {{- end }}
+          ]
+    {{- end }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      initContainers:
+      {{- if .Values.config.enableE2 }}
+        - name: wait-for-ric
+          image: docker.io/oaisoftwarealliance/oai-tcpdump-init:alpine-3.20
+          imagePullPolicy: IfNotPresent
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - until ping -c 1 {{ .Values.config.ricHost }}; do echo waiting for ric to start; sleep 1; done
+          resources:
+            requests: { cpu: "1m", memory: "50Mi" }
+            limits:   { cpu: "1m", memory: "50Mi" }
+      {{- end }}
+        - name: wait-for-cu
+          image: docker.io/oaisoftwarealliance/oai-tcpdump-init:alpine-3.20
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - until ncat -zv {{ .Values.config.cuHost }} 38472 --sctp ; do echo waiting for cu or cucp to start; sleep 1; done
+          resources:
+            requests: { cpu: "1m", memory: "50Mi" }
+            limits:   { cpu: "1m", memory: "50Mi" }
+        - name: config-patcher
+          image: docker.io/mikefarah/yq:4.47.2
+          command: ["sh", "-c", "cp /usr/bin/yq /shared/yq && chmod +x /shared/yq"]
+          resources:
+            requests: { cpu: "1m", memory: "50Mi" }
+            limits:   { cpu: "1m", memory: "50Mi" }
+          volumeMounts:
+            - name: shared-data
+              mountPath: /shared
+      containers:
+      - name: du
+        image: "{{ .Values.nfimage.repository }}:{{ .Values.nfimage.version }}"
+        volumeMounts:
+          - mountPath: /dev/hugepages
+            name: hugepage
+          - name: shared-data
+            mountPath: /shared
+          - name: configuration
+            mountPath: /opt/oai-gnb/etc
+        {{- if .Values.resources.define }}
+        resources:
+          requests:
+            {{- range .Values.resources.requests.sriovClaims }}
+            {{ .name }}: {{ .quantity | quote }}
+            {{- end }}
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+            memory: {{ .Values.resources.requests.memory | quote }}
+            {{- if .Values.resources.requests.hugepages }}
+            hugepages-1Gi: {{ .Values.resources.requests.hugepages | quote }}
+            {{- end }}
+          limits:
+            {{- range .Values.resources.limits.sriovClaims }}
+            {{ .name }}: {{ .quantity | quote }}
+            {{- end }}
+            cpu: {{ .Values.resources.limits.cpu | quote }}
+            memory: {{ .Values.resources.limits.memory | quote }}
+            {{- if .Values.resources.limits.hugepages }}
+            hugepages-1Gi: {{ .Values.resources.limits.hugepages | quote }}
+            {{- end }}
+        {{- end }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        ports:
+        - containerPort: 38472
+          name: f1c
+          protocol: SCTP
+        - containerPort: {{ .Values.config.f1duPort}}
+          name: f1u
+          protocol: UDP
+        {{- if .Values.start.du }}
+        command: [ "sh", "-c" ]
+        args:
+          - |
+            set -e
+            #temporary solution need to fix yq version in gnb image
+            cp -r /shared/yq /usr/local/bin/yq
+            echo "Resolving hostnames and patching config..."
+            cp /opt/oai-gnb/etc/config.yaml /tmp/gnb.yaml
+            for i in $(seq 1 $MAX_RETRIES); do
+              echo "$CU_HOST" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' && { export CU_IP="$CU_HOST"; break; }
+              CU_IP=$(getent hosts "$CU_HOST" | awk '{print $1}')
+              if [ -n "$CU_IP" ]; then
+                echo "Resolved CU_IP=$CU_IP"
+                export CU_IP
+                break
+              fi
+              echo "[$i/$MAX_RETRIES] Waiting for $CU_HOST to resolve..."
+              sleep $SLEEP_TIME
+            done
+
+            if [ -z "$CU_IP" ]; then
+              echo "ERROR: Unable to resolve $CU_HOST after $((MAX_RETRIES*SLEEP_TIME)) seconds"
+              exit 1
+            fi
+
+            {{- if .Values.config.enableE2 }}
+            for i in $(seq 1 $MAX_RETRIES); do
+              echo "$RIC_HOST" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' && { export RIC_IP="$RIC_HOST"; break; }
+              RIC_IP=$(getent hosts "$RIC_HOST" | awk '{print $1}')
+              if [ -n "$RIC_IP" ]; then
+                echo "Resolved RIC_IP=$RIC_IP"
+                export RIC_IP
+                break
+              fi
+              echo "[$i/$MAX_RETRIES] Waiting for $RIC_HOST to resolve..."
+              sleep $SLEEP_TIME
+            done
+
+            if [ -z "$RIC_IP" ]; then
+              echo "ERROR: Unable to resolve $RIC_HOST after $((MAX_RETRIES*SLEEP_TIME)) seconds"
+              exit 1
+            fi
+            {{- end }}
+
+            export F1C_IP=$(ip -f inet addr show $F1C_IF_NAME | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*");
+            {{- if include "oai-du.useF1u" . }}
+            export F1U_IP=$(ip -f inet addr show $F1U_IF_NAME | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*");
+            {{- end }}
+            PCI_LIST=""
+            {{- range .Values.multus.interfaces }}
+            {{- if and (eq .type "sriov") .enabled }}
+            # device plugin exports PCIDEVICE_<PREFIX>_<RESOURCE> (openshift.io, rancher.io, ...), match any prefix
+            PCI_LIST="${PCI_LIST:+$PCI_LIST }$(env | sed -n "s/^PCIDEVICE_.*_{{ .sriovResourceName | upper }}=//p")"
+            export PCI_LIST;
+            {{- end }}
+            {{- end }}
+            echo "Virtual PCI devices:$PCI_LIST";
+            CPUS=$(cat /sys/fs/cgroup/cpuset.cpus.effective | awk '/-/{for (i=$1; i<=$2; i++)printf "%s%s",i,ORS;next} 1' ORS=' ' RS=, FS=-);
+            # Count available CPUs
+            CPU_COUNT=$(echo "$CPUS" | wc -w);
+            echo "Available CPUs: $CPUS (count=$CPU_COUNT)";
+
+            if [ "$CPU_COUNT" -lt 7 ]; then
+              echo "ERROR: Only $CPU_COUNT CPUs available. Need minimum 6 for pining DPDK, L1, and RU cores and 2 for thread-pool"
+              exit 1;
+            fi
+
+            get_cpu() {
+              echo "$CPUS" | awk -v n="$1" '{ if (NF>=n) print $n; }'
+            }
+
+            # 1. First 3 cores reserved for network softirqs, GTPrx_83, and RLC queue
+            export INGESTION_CORES="$(get_cpu 1),$(get_cpu 2),$(get_cpu 3)"
+
+            # 2. Real-Time DU & DPDK (5 physical cores total, matching baseline)
+            export SYSTEM_CORE=$(get_cpu 4)
+            export RU_THREAD_CORE=$(get_cpu 5)
+            export IO_CORE=$(get_cpu 6)
+            export WORKER_CORE=$(get_cpu 7)
+            export L1_RX_CORE=$(get_cpu 8)
+            export L1_TX_CORE=$(get_cpu 9)
+
+            export THREAD_POOL=$(echo "$CPUS" | cut -d' ' -f10-16 | sed 's/ /,/g')
+            [ -z "$THREAD_POOL" ] && THREAD_POOL="-1"
+            export THREAD_POOL
+
+            echo "CPU core allocation:"
+            echo "  Ingestion & Protocol Cores: $INGESTION_CORES"
+            echo "  L1 RX Core: $L1_RX_CORE"
+            echo "  L1 TX Core: $L1_TX_CORE"
+            echo "  RU Thread Core: $RU_THREAD_CORE"
+            echo "  System Core: $SYSTEM_CORE"
+            echo "  IO Core: $IO_CORE"
+            echo "  Worker Core: $WORKER_CORE"
+            echo "  Thread Pool: $THREAD_POOL"
+
+            yq -i '
+              .Active_gNBs[0] = strenv(DU_NAME) |
+              .gNBs[0].gNB_name = strenv(DU_NAME) |
+              .gNBs[0].tracking_area_code = strenv(TAC) |
+              .gNBs[0].plmn_list = strenv(PLMN_LIST) |
+              .gNBs[].plmn_list |= (from_yaml) |
+              {{- if .Values.config.enableE2 }}
+              .e2_agent.near_ric_ip_addr = strenv(RIC_IP) |
+              {{- else }}
+              del(.e2_agent) |
+              {{- end }}
+              .MACRLCs[0].local_n_address = strenv(F1C_IP) |
+              {{- if include "oai-du.useF1u" . }}
+              .MACRLCs[0].local_n_address_f1u = strenv(F1U_IP) |
+              {{- end }}
+              .MACRLCs[0].remote_n_address = strenv(CU_IP)   |
+              .L1s[0].L1_rx_thread_core = strenv(L1_RX_CORE) |
+              .L1s[0].L1_tx_thread_core = strenv(L1_TX_CORE) |
+              .RUs[0].ru_thread_core = strenv(RU_THREAD_CORE) |
+              .fhi_72.system_core = strenv(SYSTEM_CORE) |
+              .fhi_72.io_core = strenv(IO_CORE) |
+              .fhi_72.worker_cores = [strenv(WORKER_CORE)] |
+              .thread-pool = (strenv(THREAD_POOL)) |
+              .fhi_72.dpdk_devices = (strenv(PCI_LIST) | split(" "))
+            ' /tmp/gnb.yaml
+            cat /tmp/gnb.yaml;
+            exec taskset -c $INGESTION_CORES stdbuf -o0 /opt/oai-gnb/bin/nr-softmodem -O /tmp/gnb.yaml;
+        {{- else}}
+        command:
+          - /bin/sleep
+          - infinity
+        {{- end}}
+        env:
+          - name: DU_NAME
+            value: "{{ .Values.config.duName }}"
+          ## For resolving the hostname
+          - name: MAX_RETRIES
+            value: "10"
+          - name: SLEEP_TIME
+            value: "2"
+            {{- if .Values.config.enableE2 }}
+          - name: RIC_HOST
+            value: "{{ .Values.config.ricHost }}"
+            {{- end }}
+          - name: F1C_IF_NAME
+            value: '{{ include "oai-du.f1cIfName" . }}'
+        {{- if include "oai-du.useF1u" . }}
+          - name: F1U_IF_NAME
+            value: '{{ include "oai-du.f1uIfName" $ }}'
+        {{- end }}
+          - name: CU_HOST
+            value: "{{ .Values.config.cuHost }}"
+          - name: TAC
+            value: "{{ .Values.config.tac }}"
+          - name: PLMN_LIST
+            value: |
+            {{ toYaml .Values.config.plmn_list | nindent 16 }}
+      volumes:
+      - name: configuration
+        configMap:
+          name: {{ .Chart.Name }}-configmap
+      - emptyDir:
+          medium: HugePages
+        name: hugepage
+      - name: shared-data
+        emptyDir: {}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccountName: {{ .Chart.Name }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if .Values.nodeSelector}}
+      nodeSelector:
+         {{- toYaml .Values.nodeSelector | nindent 12 }}
+      {{- end }}
+      {{- if .Values.nodeName}}
+      nodeName: {{ .Values.nodeName }}
+      {{- end }}

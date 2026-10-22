@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: MIT
+
+{{- $kubeDist := .Values.kubernetesDistribution }}
+
+{{- if and (hasKey .Values "global") (hasKey .Values.global "kubernetesDistribution") }}
+  {{- $kubeDist = .Values.global.kubernetesDistribution }}
+{{- end }}
+
+{{- if eq $kubeDist "Openshift" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Chart.Name }}-{{ .Release.Namespace }}-role
+  labels:
+    app: {{ .Release.Name }}
+rules:
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - privileged
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Chart.Name }}-{{ .Release.Namespace }}-binding
+  labels:
+    app: {{ .Release.Name }}
+subjects:
+- kind: ServiceAccount
+  name: {{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Chart.Name }}-{{ .Release.Namespace }}-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

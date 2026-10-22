@@ -1,0 +1,148 @@
+# SPDX-License-Identifier: MIT
+
+{{- if not (hasKey .Values.xapps .Values.xapp) }}
+{{- fail (printf "unknown xapp %q, choose one of: %s" .Values.xapp (keys .Values.xapps | sortAlpha | join ", ")) }}
+{{- end }}
+{{- $bin := get .Values.xapps .Values.xapp }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "duranta-xapp.fullname" . }}
+  labels:
+    {{- include "duranta-xapp.labels" . | nindent 4 }}
+    xapp: {{ .Values.xapp }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "duranta-xapp.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "duranta-xapp.selectorLabels" . | nindent 8 }}
+        xapp: {{ .Values.xapp }}
+    {{- if and .Values.multus.enabled .Values.multus.interfaces }}
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |-
+          [
+          {{- $first := true }}
+          {{- range .Values.multus.interfaces }}
+          {{- if .enabled }}
+            {{- if not $first }},{{- end }}
+            {
+              "name": "{{ $.Release.Name }}-{{ .name }}-{{ $.Chart.Name }}",
+              "interface": "{{ .name }}"
+              {{- if .mac }},
+              "mac": "{{ .mac }}"
+              {{- end }}
+              {{- if .defaultRoute }},
+              "default-route": ["{{ .defaultRoute }}"]
+              {{- end }}
+              {{- if .gateway }},
+              "gateway": "{{ .gateway }}"
+              {{- end }}
+            }
+            {{- $first = false }}
+          {{- end }}
+          {{- end }}
+          ]
+    {{- end }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+    {{- end }}
+      initContainers:
+        # resolve config.ricHost (the RIC's headless service resolves once the RIC pod is ready) and write flexric.conf
+        - name: config-patcher
+          image: docker.io/oaisoftwarealliance/oai-tcpdump-init:alpine-3.20
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ "ALL" ]
+            seccompProfile:
+              type: RuntimeDefault
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - |
+              set -e
+              if echo "$RIC_HOST" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+                RIC_IP="$RIC_HOST"
+              else
+                until RIC_IP=$(getent ahostsv4 "$RIC_HOST" | awk 'NR==1{print $1}') && [ -n "$RIC_IP" ]; do
+                  echo "waiting for $RIC_HOST to resolve"; sleep 2
+                done
+              fi
+              echo "nearRT-RIC: $RIC_HOST -> $RIC_IP (via {{ include "duranta-xapp.e2IfName" . }})"
+              sed "s/@RIC_IP@/$RIC_IP/" /tmp/config/flexric.conf > /tmp/config_patch/flexric.conf
+              cat /tmp/config_patch/flexric.conf
+          env:
+            - name: RIC_HOST
+              value: {{ .Values.config.ricHost | quote }}
+          volumeMounts:
+            - name: shared-data
+              mountPath: /tmp/config_patch
+            - name: configuration
+              mountPath: /tmp/config
+          resources:
+            requests: { cpu: "1m", memory: "50Mi" }
+            limits:   { cpu: "1m", memory: "50Mi" }
+      containers:
+      - name: xapp
+        image: "{{ .Values.nfimage.repository }}:{{ .Values.nfimage.version }}"
+        imagePullPolicy: {{ .Values.nfimage.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ "ALL" ]
+          seccompProfile:
+            type: RuntimeDefault
+        # same command as the FlexRIC CI scenario; the xApp reads /usr/local/etc/flexric/flexric.conf.
+        # umask 0000: the SQLite files in the shared volume must stay writable for Grafana (WAL -shm/-wal files)
+        command: [ "sh", "-c", "umask 0000; exec stdbuf -o0 {{ $bin }}" ]
+        env:
+          - name: TZ
+            value: {{ .Values.config.timeZone | quote }}
+        volumeMounts:
+          - mountPath: /usr/local/etc/flexric/
+            name: shared-data
+          {{- if .Values.db.enabled }}
+          - mountPath: /xapp_db_dir
+            name: xapp-db
+          {{- end }}
+        readinessProbe:
+          exec:
+            command: [ "pgrep", "-f", {{ base $bin | quote }} ]
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        {{- if .Values.resources.define }}
+        resources:
+          {{- toYaml (pick .Values.resources "limits" "requests") | nindent 10 }}
+        {{- end }}
+      volumes:
+        - name: configuration
+          configMap:
+            name: {{ include "duranta-xapp.fullname" . }}-configmap
+        - name: shared-data
+          emptyDir: {}
+        {{- if .Values.db.enabled }}
+        - name: xapp-db
+          persistentVolumeClaim:
+            claimName: {{ .Values.db.claimName }}
+        {{- end }}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      serviceAccountName: {{ include "duranta-xapp.fullname" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeName }}
+      nodeName: {{ .Values.nodeName }}
+      {{- end }}

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+#
+# Override for duranta-oai-nr-ue when used with the F1-split multus scenario.
+# The UE connects to the DU via rfsim over the regular cluster network
+# (no multus on the UE side). The DU kubernetes service name is "oai-ran".
+
+config:
+  rfSimServer: "oai-ran"
