@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# The essential tests' results known and accepted for duranta-oai-du, for the CNTi job
+# (.github/workflows/cnti.yml, expected_results). A test not listed is expected
+# to pass. When a result changes, the job says so in its summary and as a
+# warning. Update this file in the pull request that changes the result.
+- test: non_root_containers
+  status: failed
+  reason: >-
+    The OAI images run as root (podSecurityContext runAsUser and runAsGroup 0):
+    running as non-root needs file capabilities on the binaries and a writable
+    configuration directory in the images

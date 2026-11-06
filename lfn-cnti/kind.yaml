@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# kind cluster for the CNTi job (.github/workflows/cnti.yml): a control plane and two
+# workers, as node_drain needs a second node to move a pod to.
+#   kind create cluster --name cnti-testsuite --config lfn-cnti/kind.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker

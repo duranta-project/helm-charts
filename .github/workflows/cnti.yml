@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: MIT
+#
+# Runs the CNTi Test Suite's essential tests (lfn-cnti/README.md) for each network
+# function as its own CNF, on a kind cluster, and publishes one badge per function.
+# The same steps as lfn-cnti/runCNTI.sh, through https://github.com/lfn-cnti/testsuite-action
+name: CNTi essential
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+  # Pull requests that change a chart, its CNTi configuration or this job.
+  pull_request:
+    paths:
+      - charts/**
+      - lfn-cnti/**
+      - .github/workflows/cnti.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cnti-essential-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Runs on main (nightly, or by hand): the only runs that publish the badges,
+  # and the only ones with a write token.
+  essential:
+    if: github.repository == 'duranta-project/helm-charts' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      # Publishes the badges to the orphan branch `badges`.
+      contents: write
+    strategy: &nfs
+      fail-fast: false
+      matrix:
+        nf: [duranta-oai-gnb, duranta-oai-cu, duranta-oai-du, duranta-oai-nr-ue, duranta-oai-cu-cp, duranta-oai-cu-up, duranta-flexric]
+    env: &env
+      CORE_NS: oai-core
+      DEPS_NS: oai-cnti-deps
+      AMF: oai-amf.oai-core.svc.cluster.local
+      # The functions and their peers share the runner's four cores: scaling
+      # and rollouts take longer than the suite's 60-second default.
+      CNTI_TESTSUITE_GENERIC_OPERATION_TIMEOUT: "180"
+    steps: &steps
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The OAI core, peer of every function except FlexRIC: test
+      # infrastructure, installed outside the CNF under test.
+      - name: OAI core charts
+        if: matrix.nf != 'duranta-flexric'
+        uses: actions/checkout@v4
+        with:
+          repository: openairinterface/orchestration
+          ref: 7925f939ea36a3c4c1df5525f3718ce8470f6b3f # main, oai-5g-basic v2.2
+          path: orchestration
+          persist-credentials: false
+
+      # GitHub's Ubuntu images ship MySQL with an AppArmor profile for
+      # /usr/sbin/mysqld. kind's nodes run unconfined, so the profile attaches
+      # to the core's MySQL container by path and denies it its own files
+      # (/etc/my.cnf, /usr/share/mysql-9.0): it starts without its configuration
+      # and never gets Ready. A cluster outside GitHub's runners needs nothing.
+      - name: Unload the runner's mysqld AppArmor profile
+        if: matrix.nf != 'duranta-flexric'
+        run: |
+          if sudo aa-status 2>/dev/null | grep -q '/usr/sbin/mysqld'; then
+            sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
+            echo "Unloaded the runner's /usr/sbin/mysqld AppArmor profile"
+          fi
+
+      # The cluster is created here, so the peers can be installed before the
+      # suite installs the CNF (lfn-cnti/kind.yaml).
+      - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
+        with:
+          cluster_name: cnti-testsuite
+          config: lfn-cnti/kind.yaml
+
+      # As lfn-cnti/runCNTI.sh: the core for every RAN function, and a CU,
+      # CU-CP or gNB for the DU, CU-UP and NR-UE.
+      - name: Peers
+        if: matrix.nf != 'duranta-flexric'
+        env:
+          NF: ${{ matrix.nf }}
+        run: |
+          set -euo pipefail
+          helm dependency update orchestration/oai-5g-core/oai-5g-basic >/dev/null
+          helm install basic orchestration/oai-5g-core/oai-5g-basic -n "$CORE_NS" --create-namespace --wait --timeout 10m
+          dep() { local r=$1 c=$2; shift 2; helm install "$r" "charts/$c" -n "$DEPS_NS" --create-namespace --wait --timeout 10m --set config.amfHost="$AMF" "$@"; }
+          case "$NF" in
+            duranta-oai-du)    dep cu duranta-oai-cu ;;
+            duranta-oai-cu-up) dep cucp duranta-oai-cu-cp ;;
+            # The gNB peer of the NR-UE without SYS_NICE, so without real-time
+            # threads: in rfsim mode a real-time gNB and a real-time UE leave the
+            # runner's four cores no time for the cluster's API server. The UE,
+            # the CNF under test, keeps its defaults.
+            duranta-oai-nr-ue) dep gnb duranta-oai-gnb --set 'securityContext.capabilities.add={IPC_LOCK}' ;;
+          esac
+          kubectl get pods -n "$CORE_NS"; kubectl get pods -n "$DEPS_NS" 2>/dev/null || true
+
+      - uses: lfn-cnti/testsuite-action@3c0e163cbbdde302cdd9abb9dbe8c2cbd6a72c71 # v1.4.0
+        with:
+          version: v2.4.1
+          cnf_config: lfn-cnti/${{ matrix.nf }}/cnti-testsuite.yaml
+          create_kind_cluster: false
+          install_timeout: 900
+          tests: cert
+          artifact_name: cnti-${{ matrix.nf }}
+          badge_branch: badges
+          badge_name: ${{ matrix.nf }}
+          # Known results (lfn-cnti/<nf>/expected.yaml): a test whose result
+          # changes is reported in the job summary and as a warning.
+          expected_results: lfn-cnti/${{ matrix.nf }}/expected.yaml
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          set +e
+          kubectl get pods -A -o wide
+          kubectl get events -A --sort-by=.lastTimestamp | tail -40
+
+  # Pull requests and manual runs on other branches: the same steps with a
+  # read-only token. The action publishes the badges only from the default
+  # branch, so nothing is published here.
+  essential-pr:
+    if: github.repository == 'duranta-project/helm-charts' && (github.event_name == 'pull_request' || github.ref != 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy: *nfs
+    env: *env
+    steps: *steps
