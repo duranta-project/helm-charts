@@ -252,6 +252,10 @@ spec:
             value: {{ .Values.config.useAdditionalOptions | quote }}
           - name: OAI_GDBSTACKS
             value: {{ .Values.config.gdbstack | quote }}
+          # tini sends SIGTERM to the whole process group: nr-softmodem's helper process
+          # (start_background_system) gets it too, instead of being killed when tini exits
+          - name: TINI_KILL_PROCESS_GROUP
+            value: "1"
       {{- if .Values.includeTcpDumpContainer }}
       - name: tcpdump
         image: "{{ .Values.tcpdumpimage.repository }}:{{ .Values.tcpdumpimage.version }}"
