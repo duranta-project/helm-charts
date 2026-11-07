@@ -211,6 +211,10 @@ spec:
             value: {{ .Values.config.useAdditionalOptions | quote }}
           - name: OAI_GDBSTACKS
             value: "{{ .Values.config.gdbstack }}"
+          # tini sends SIGTERM to the whole process group: nr-softmodem's helper process
+          # (start_background_system) gets it too, instead of being killed when tini exits
+          - name: TINI_KILL_PROCESS_GROUP
+            value: "1"
           {{- if eq .Values.config.usrp "b2xx" }}
           - name: USE_B2XX
             value: "yes"
